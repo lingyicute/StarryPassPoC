@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-cmn-Hans">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
+
+    <link rel="shortcut icon" href="./favicon.ico">
+
+
+    <title>星愿令 YiPass</title>
+    <meta name="keywords" content="密码管理,密码,密码本,密码管理工具" />
+    <meta name="description" content="简单方便防破解，不一样的密码管理工具" />
+
+    <link href="./assets/css/app.css?id=90b2992f5dca22106d25" rel="stylesheet" type="text/css">
+
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#ced3e1">
+
+
+    <meta name="apple-mobile-web-app-title" content="YiPass">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" sizes="144x144" href="./assets/img/icons/144full.png" />
+
+    <link rel="shortcut icon" href="/favicon.ico" sizes="16x16" type="image/x-icon">
+
+    <link rel="icon" href="./assets/img/icons/48.png" sizes="48x48" type="image/png" />
+    <link rel="icon" href="./assets/img/icons/144.png" sizes="144x144" type="image/png" />
+    <link rel="icon" href="./assets/img/icons/512.png" sizes="512x512" type="image/png" />
+</head>
+
+<body>
+    <div id="top-bar">
+        <div id="top-bar-box">
+            <div id="logo">
+                <div class="main">星愿令</div>
+                <div class="english">
+                    <p>Starry</p>
+                    <p>Pass</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-box">
+            <input class="password-in-mind" type="text" placeholder="主密码">
+            <input class="key" type="text" placeholder="代号">
+            <div id="last-password" class="hidden">
+                <span class="password">请输入主密码和代号</span>
+                <button class="show-password"><i class="svg-icon icon-open-eye"></i></button>
+                <button class="copy">复制</button>
+            </div>
+        </div>
+
+        <div id="footer">
+            <p>星愿令 Copyright © 2023 xns.limited</p>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./service-worker.js');
+        }
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            document.addEventListener("DOMContentLoaded", function () {
+                document.title = '';
+            });
+        }
+    </script>
+    <script src="./assets/js/app.js?id=f61affe93bf8d529110a" type="text/javascript"></script>
+
+</body>
+
+</html>
