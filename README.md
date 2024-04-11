@@ -1,2 +1,2 @@
-# YiPass
-YiPass Password Manager
+# StarryPass
+StarryPass Password Manager
