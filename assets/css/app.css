@@ -466,26 +466,22 @@ body {
     bottom: 10px;
     color: #fff;
     display: flex;
-    align-items: flex-end
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 #logo .main {
     font-family: Alibaba-PuHuiTi-Heavy, sans-serif;
-    font-size: 60px
-}
-
-#logo .english,
-#logo .main {
-    align-self: flex-end;
-    line-height: 1.1
+    font-size: 60px;
+    order: 2;
 }
 
 #logo .english {
     font-family: Alibaba-PuHuiTi-Regular, sans-serif;
     font-size: 22px;
-    margin-left: 3px;
-    margin-bottom: 2px;
-    opacity: .5
+    margin-bottom: 3px;
+    opacity: .5;
+    order: 1;
 }
 
 .content-box {
