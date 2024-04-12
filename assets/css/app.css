@@ -479,7 +479,7 @@ body {
 #logo .english {
     font-family: Alibaba-PuHuiTi-Regular, sans-serif;
     font-size: 22px;
-    margin-bottom: 3px;
+    margin-bottom: 1px;
     opacity: .5;
     order: 1;
 }
