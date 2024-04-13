@@ -445,9 +445,9 @@ body {
 #top-bar {
     height: 270px;
     max-height: 32vh;
-    background-image: url(top-bar-bg.png);
+    background-image: url(bg.png);
     background-repeat: no-repeat;
-    background-position: 100%;
+    background-position: 49%;
     background-size: auto 100%
 }
 
@@ -458,28 +458,6 @@ body {
     height: 100%;
     padding: 0 20px;
     position: relative
-}
-
-#logo {
-    position: absolute;
-    left: 20px;
-    bottom: 10px;
-    color: #fff;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-}
-
-#logo .main {
-    font-size: 60px;
-    order: 2;
-}
-
-#logo .english {
-    font-size: 22px;
-    margin-bottom: 1px;
-    opacity: .5;
-    order: 1;
 }
 
 .content-box {
