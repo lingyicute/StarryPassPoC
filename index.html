@@ -1,59 +1,1120 @@
 <!DOCTYPE html>
-<html lang="zh-cmn-Hans">
-
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
-    <title>星愿令 StarryPass</title>
-    <meta name="keywords" content="密码管理,密码,密码本,密码管理工具" />
-    <meta name="description" content="简单方便防破解，不一样的密码管理工具" />
-    <link href="./assets/css/app.css?id=90b2992f5dca22106d25" rel="stylesheet" type="text/css">
-    <meta name="theme-color" content="#ced3e1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>星愿令 StarryPass · 确定性密码生成器</title>
+    <meta name="description" content="简单方便防破解，不一样的密码管理工具">
+    <meta name="theme-color" content="#f9f9ff" id="theme-color-meta">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="StarryPass">
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./assets/img/icons/apple.png" />
     <link rel="shortcut icon" href="/favicon.ico" sizes="32x32" type="image/x-icon">
     <link rel="icon" href="./assets/img/icons/192.png" sizes="192x192" type="image/png" />
     <link rel="icon" href="./assets/img/icons/512.png" sizes="512x512" type="image/png" />
+    <style>
+        /* ============================================================
+           Material You (Material 3) design tokens — light theme
+           ============================================================ */
+        :root {
+            color-scheme: light;
+
+            --md-sys-color-primary: #415f91;
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-primary-container: #d6e3ff;
+            --md-sys-color-on-primary-container: #001b3e;
+
+            --md-sys-color-secondary: #565f71;
+            --md-sys-color-on-secondary: #ffffff;
+            --md-sys-color-secondary-container: #dae2f9;
+            --md-sys-color-on-secondary-container: #131c2b;
+
+            --md-sys-color-tertiary: #705575;
+            --md-sys-color-on-tertiary: #ffffff;
+            --md-sys-color-tertiary-container: #fad8fd;
+            --md-sys-color-on-tertiary-container: #2a122e;
+
+            --md-sys-color-error: #ba1a1a;
+            --md-sys-color-on-error: #ffffff;
+            --md-sys-color-error-container: #ffdad6;
+            --md-sys-color-on-error-container: #410002;
+
+            --md-sys-color-background: #f9f9ff;
+            --md-sys-color-on-background: #191c20;
+            --md-sys-color-surface: #f9f9ff;
+            --md-sys-color-on-surface: #191c20;
+            --md-sys-color-surface-variant: #e0e2ec;
+            --md-sys-color-on-surface-variant: #44474e;
+            --md-sys-color-outline: #74777f;
+            --md-sys-color-outline-variant: #c4c6d0;
+
+            --md-sys-color-surface-container-lowest: #ffffff;
+            --md-sys-color-surface-container-low: #f3f3fa;
+            --md-sys-color-surface-container: #ededf4;
+            --md-sys-color-surface-container-high: #e7e8ef;
+            --md-sys-color-surface-container-highest: #e1e2e9;
+
+            --md-sys-color-inverse-surface: #2e3039;
+            --md-sys-color-inverse-on-surface: #f1f0f7;
+            --md-sys-color-inverse-primary: #aac7ff;
+
+            --md-sys-color-scrim: rgba(0, 0, 0, .32);
+
+            --md-sys-shape-corner-extra-small: 4px;
+            --md-sys-shape-corner-small: 8px;
+            --md-sys-shape-corner-medium: 12px;
+            --md-sys-shape-corner-large: 16px;
+            --md-sys-shape-corner-extra-large: 28px;
+            --md-sys-shape-corner-full: 9999px;
+
+            --md-sys-elevation-1: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 3px 1px rgba(0, 0, 0, .15);
+            --md-sys-elevation-3: 0 1px 3px rgba(0, 0, 0, .3), 0 4px 8px 3px rgba(0, 0, 0, .15);
+
+            --md-ref-typeface: "Roboto", "Segoe UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+                "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+            --md-ref-typeface-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas,
+                "Courier New", monospace;
+
+            --blob-1: rgba(214, 227, 255, .55);
+            --blob-2: rgba(250, 216, 253, .35);
+        }
+
+        /* ============================================================
+           Material You design tokens — dark theme
+           ============================================================ */
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+
+            --md-sys-color-primary: #aac7ff;
+            --md-sys-color-on-primary: #0a305f;
+            --md-sys-color-primary-container: #284777;
+            --md-sys-color-on-primary-container: #d6e3ff;
+
+            --md-sys-color-secondary: #bec6dc;
+            --md-sys-color-on-secondary: #283141;
+            --md-sys-color-secondary-container: #3e4759;
+            --md-sys-color-on-secondary-container: #dae2f9;
+
+            --md-sys-color-tertiary: #ddbce0;
+            --md-sys-color-on-tertiary: #402745;
+            --md-sys-color-tertiary-container: #583d5d;
+            --md-sys-color-on-tertiary-container: #fad8fd;
+
+            --md-sys-color-error: #ffb4ab;
+            --md-sys-color-on-error: #690005;
+            --md-sys-color-error-container: #93000a;
+            --md-sys-color-on-error-container: #ffdad6;
+
+            --md-sys-color-background: #111318;
+            --md-sys-color-on-background: #e2e2e9;
+            --md-sys-color-surface: #111318;
+            --md-sys-color-on-surface: #e2e2e9;
+            --md-sys-color-surface-variant: #44474e;
+            --md-sys-color-on-surface-variant: #c4c6d0;
+            --md-sys-color-outline: #8e9099;
+            --md-sys-color-outline-variant: #44474e;
+
+            --md-sys-color-surface-container-lowest: #0c0e13;
+            --md-sys-color-surface-container-low: #191c20;
+            --md-sys-color-surface-container: #1d2024;
+            --md-sys-color-surface-container-high: #282a2f;
+            --md-sys-color-surface-container-highest: #33353a;
+
+            --md-sys-color-inverse-surface: #e2e2e9;
+            --md-sys-color-inverse-on-surface: #2e3039;
+            --md-sys-color-inverse-primary: #415f91;
+
+            --blob-1: rgba(40, 71, 119, .38);
+            --blob-2: rgba(88, 61, 93, .30);
+        }
+
+        /* ============================================================
+           Base
+           ============================================================ */
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html { -webkit-text-size-adjust: 100%; }
+
+        body {
+            margin: 0;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            font-family: var(--md-ref-typeface);
+            font-size: 16px;
+            line-height: 1.5;
+            color: var(--md-sys-color-on-surface);
+            background: var(--md-sys-color-background);
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        /* expressive tonal blobs — radial gradients only (no blur filter, cheap to composite) */
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            z-index: -1;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        body::before {
+            width: 46vmax; height: 46vmax;
+            top: -18vmax; right: -14vmax;
+            background: radial-gradient(closest-side, var(--blob-1), transparent 70%);
+        }
+        body::after {
+            width: 34vmax; height: 34vmax;
+            bottom: -14vmax; left: -12vmax;
+            background: radial-gradient(closest-side, var(--blob-2), transparent 70%);
+        }
+
+        button {
+            font: inherit;
+            color: inherit;
+            border: none;
+            background: none;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        [hidden] { display: none !important; }
+
+        svg { display: block; }
+
+        :focus-visible {
+            outline: 3px solid var(--md-sys-color-secondary);
+            outline-offset: 2px;
+            border-radius: var(--md-sys-shape-corner-small);
+        }
+
+        /* ============================================================
+           Icons
+           ============================================================ */
+        .icon {
+            width: 24px; height: 24px;
+            flex: none;
+            fill: currentColor;
+        }
+        .icon--18 { width: 18px; height: 18px; }
+
+        /* ============================================================
+           App bar (non-scrolling header)
+           ============================================================ */
+        .app-bar {
+            width: 100%;
+            margin: 0 auto;
+            padding: max(20px, env(safe-area-inset-top)) 20px 8px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .app-bar__logo {
+            width: 48px; height: 48px;
+            border-radius: 16px;
+            display: grid;
+            place-items: center;
+            color: var(--md-sys-color-on-primary-container);
+            background: var(--md-sys-color-primary-container);
+        }
+        .app-bar__texts { min-width: 0; }
+        .app-bar__title {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 500;
+            letter-spacing: .15px;
+            line-height: 1.3;
+        }
+        .app-bar__subtitle {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        .app-bar__spacer { flex: 1; }
+
+        /* ============================================================
+           Icon button (M3)
+           ============================================================ */
+        .icon-button {
+            position: relative;
+            width: 44px; height: 44px;
+            border-radius: var(--md-sys-shape-corner-full);
+            display: grid;
+            place-items: center;
+            color: var(--md-sys-color-on-surface-variant);
+            overflow: hidden;
+            transition: background-color .2s cubic-bezier(.2, 0, 0, 1), color .2s;
+        }
+        .icon-button:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+        .icon-button:active { background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent); }
+        .icon-button--filled-tonal {
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+        }
+        .icon-button--filled-tonal:hover { background: color-mix(in srgb, var(--md-sys-color-secondary-container) 92%, var(--md-sys-color-on-secondary-container) 8%); }
+        .icon-button--filled-tonal:active { background: color-mix(in srgb, var(--md-sys-color-secondary-container) 84%, var(--md-sys-color-on-secondary-container) 16%); }
+        .icon-button[disabled] { opacity: .38; pointer-events: none; }
+
+        /* ============================================================
+           Main layout
+           ============================================================ */
+        .content {
+            width: 100%;
+            max-width: 480px;
+            margin: 12px auto 0;
+            padding: 8px 20px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex: 1;
+        }
+
+        /* ============================================================
+           Card (M3 surface low)
+           ============================================================ */
+        .card {
+            background: var(--md-sys-color-surface-container-low);
+            border-radius: var(--md-sys-shape-corner-extra-large);
+            padding: 24px 24px 20px;
+            border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
+        }
+        .card__header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .card__title {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+        .card__subtitle {
+            margin: 2px 0 0;
+            font-size: 14px;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        .card__spacer { flex: 1; }
+
+        /* ============================================================
+           Filled text field (M3)
+           ============================================================ */
+        .field {
+            position: relative;
+            margin-bottom: 20px;
+            display: block;
+        }
+        .field__input {
+            width: 100%;
+            height: 58px;
+            padding: 26px 52px 8px 52px;
+            font: inherit;
+            font-size: 16px;
+            font-weight: 400;
+            color: var(--md-sys-color-on-surface);
+            background: var(--md-sys-color-surface-container-highest);
+            border: none;
+            border-radius: var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small) 0 0;
+            border-bottom: 1px solid var(--md-sys-color-outline);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            caret-color: var(--md-sys-color-primary);
+            transition: background-color .2s cubic-bezier(.2, 0, 0, 1), border-color .2s;
+        }
+        .field__input::placeholder { color: transparent; }
+        .field:hover .field__input {
+            background: color-mix(in srgb, var(--md-sys-color-surface-container-highest) 92%, var(--md-sys-color-on-surface) 8%);
+        }
+        .field:focus-within .field__input { border-bottom: 2px solid var(--md-sys-color-primary); padding-bottom: 7px; }
+        .field__label {
+            position: absolute;
+            left: 52px;
+            top: 19px;
+            font-size: 16px;
+            color: var(--md-sys-color-on-surface-variant);
+            pointer-events: none;
+            transition: top .15s cubic-bezier(.2, 0, 0, 1),
+                        font-size .15s cubic-bezier(.2, 0, 0, 1),
+                        color .15s cubic-bezier(.2, 0, 0, 1);
+        }
+        .field__input:focus ~ .field__label,
+        .field__input:not(:placeholder-shown) ~ .field__label {
+            top: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: .4px;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        .field:focus-within .field__label { color: var(--md-sys-color-primary); }
+        .field__icon {
+            position: absolute;
+            left: 16px;
+            top: 17px;
+            color: var(--md-sys-color-on-surface-variant);
+            pointer-events: none;
+        }
+        .field:focus-within .field__icon { color: var(--md-sys-color-primary); }
+        .field__action {
+            position: absolute;
+            right: 4px;
+            top: 7px;
+            width: 44px; height: 44px;
+        }
+
+        /* ============================================================
+           Result surface
+           ============================================================ */
+        .result {
+            background: var(--md-sys-color-surface-container-high);
+            border-radius: var(--md-sys-shape-corner-large);
+            padding: 18px 16px 14px;
+            margin-top: 4px;
+        }
+        .result__heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .result__caption {
+            font-size: 13px;
+            color: var(--md-sys-color-on-surface-variant);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .result__caption .icon { width: 16px; height: 16px; }
+
+        .password {
+            min-height: 34px;
+            font-family: var(--md-ref-typeface-mono);
+            font-size: 20px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            line-height: 1.6;
+            word-break: break-all;
+            user-select: all;
+            -webkit-user-select: all;
+            color: var(--md-sys-color-on-surface);
+        }
+        .password--empty {
+            font-family: var(--md-ref-typeface);
+            font-size: 15px;
+            font-weight: 400;
+            letter-spacing: 0;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+
+        .result__actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--md-sys-color-outline-variant);
+        }
+
+        /* strength meter */
+        .strength {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .strength__bars { display: flex; gap: 4px; }
+        .strength__bar {
+            width: clamp(18px, 8vw, 26px);
+            height: 6px;
+            border-radius: 3px;
+            background: var(--md-sys-color-surface-container-highest);
+            transition: background-color .3s;
+        }
+        .strength__label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+            transition: color .3s;
+        }
+        .strength[data-level="3"] .strength__bar { background: var(--md-sys-color-primary); }
+        .strength[data-level="3"] .strength__label { color: var(--md-sys-color-primary); }
+        .strength[data-level="2"] .strength__bar:nth-child(-n+3) { background: var(--md-sys-color-tertiary); }
+        .strength[data-level="2"] .strength__label { color: var(--md-sys-color-tertiary); }
+        .strength[data-level="1"] .strength__bar:nth-child(-n+2) { background: var(--md-sys-color-error); }
+        .strength[data-level="1"] .strength__label { color: var(--md-sys-color-error); }
+        .strength[data-level="0"] .strength__label { color: var(--md-sys-color-on-surface-variant); }
+
+        /* ============================================================
+           Filled button (M3)
+           ============================================================ */
+        .filled-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 48px;
+            padding: 0 24px;
+            border-radius: var(--md-sys-shape-corner-full);
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: .1px;
+            color: var(--md-sys-color-on-primary);
+            background: var(--md-sys-color-primary);
+            overflow: hidden;
+            transition: background-color .2s cubic-bezier(.2, 0, 0, 1), box-shadow .2s, transform .1s;
+        }
+        .filled-button:hover {
+            background: color-mix(in srgb, var(--md-sys-color-primary) 92%, var(--md-sys-color-on-primary) 8%);
+            box-shadow: var(--md-sys-elevation-1);
+        }
+        .filled-button:active { background: color-mix(in srgb, var(--md-sys-color-primary) 84%, var(--md-sys-color-on-primary) 16%); }
+        .filled-button[disabled] {
+            background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+            color: color-mix(in srgb, var(--md-sys-color-on-surface) 38%, transparent);
+            box-shadow: none;
+            pointer-events: none;
+        }
+        .filled-button.is-copied {
+            background: var(--md-sys-color-primary-container);
+            color: var(--md-sys-color-on-primary-container);
+        }
+
+        /* ============================================================
+           Text button (M3)
+           ============================================================ */
+        .text-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 40px;
+            padding: 0 12px;
+            border-radius: var(--md-sys-shape-corner-full);
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: .1px;
+            color: var(--md-sys-color-primary);
+            overflow: hidden;
+            transition: background-color .2s;
+        }
+        .text-button:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); }
+        .text-button:active { background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent); }
+        .text-button[disabled] { opacity: .38; pointer-events: none; }
+
+        /* ============================================================
+           Info card
+           ============================================================ */
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .step {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+        .step__num {
+            width: 26px; height: 26px;
+            flex: none;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            background: var(--md-sys-color-primary-container);
+            color: var(--md-sys-color-on-primary-container);
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .step__body { min-width: 0; }
+        .step__title { font-size: 15px; font-weight: 500; margin: 2px 0 0; }
+        .step__desc { margin: 2px 0 0; font-size: 13.5px; color: var(--md-sys-color-on-surface-variant); }
+
+        .notice {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            margin-top: 18px;
+            padding: 12px 14px;
+            border-radius: var(--md-sys-shape-corner-medium);
+            background: var(--md-sys-color-surface-container-high);
+            font-size: 13px;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        .notice .icon { width: 18px; height: 18px; margin-top: 2px; color: var(--md-sys-color-primary); }
+
+        /* ============================================================
+           Footer
+           ============================================================ */
+        .footer {
+            padding: 8px 20px calc(24px + env(safe-area-inset-bottom));
+            text-align: center;
+            font-size: 12.5px;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        .footer a { color: var(--md-sys-color-primary); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+
+        /* ============================================================
+           Snackbar
+           ============================================================ */
+        .snackbar {
+            position: fixed;
+            left: 50%;
+            bottom: calc(20px + env(safe-area-inset-bottom));
+            transform: translate(-50%, 150%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: calc(100vw - 40px);
+            padding: 12px 18px;
+            border-radius: var(--md-sys-shape-corner-small);
+            background: var(--md-sys-color-inverse-surface);
+            color: var(--md-sys-color-inverse-on-surface);
+            font-size: 14px;
+            box-shadow: var(--md-sys-elevation-3);
+            z-index: 20;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: transform .3s cubic-bezier(.2, 0, 0, 1), opacity .3s, visibility 0s linear .3s;
+        }
+        .snackbar.is-visible {
+            transform: translate(-50%, 0);
+            opacity: 1;
+            visibility: visible;
+            transition: transform .3s cubic-bezier(.2, 0, 0, 1), opacity .3s, visibility 0s;
+        }
+        .snackbar .icon { width: 18px; height: 18px; color: var(--md-sys-color-inverse-primary); }
+
+        /* ============================================================
+           Ripple
+           ============================================================ */
+        .ripple-wave {
+            position: absolute;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: .14;
+            transform: scale(0);
+            animation: ripple .45s cubic-bezier(.2, 0, 0, 1) forwards;
+            pointer-events: none;
+        }
+        @keyframes ripple { to { transform: scale(1); opacity: 0; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: .01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: .01ms !important;
+            }
+        }
+
+        /* below-the-fold card: skip rendering/painting until scrolled into view */
+        .card--info {
+            content-visibility: auto;
+            contain-intrinsic-size: auto 400px;
+        }
+
+        /* ============================================================
+           Small screens
+           ============================================================ */
+        @media (max-width: 400px) {
+            .card { padding: 20px 16px 16px; }
+            .content { padding-left: 12px; padding-right: 12px; }
+            .password { font-size: 18px; }
+        }
+    </style>
 </head>
-
 <body>
-    <div id="top-bar">
-        <div id="top-bar-box">
-            <div id="logo">
-            </div>
-        </div>
 
-        <div class="content-box">
-            <input class="password-in-mind" type="text" placeholder="主密码">
-            <input class="key" type="text" placeholder="代号">
-            <div id="last-password" class="hidden">
-                <span class="password">请输入主密码和代号</span>
-                <button class="show-password"><i class="svg-icon icon-open-eye"></i></button>
-                <button class="copy">复制</button>
-            </div>
+    <header class="app-bar">
+        <div class="app-bar__logo" aria-hidden="true">
+            <svg class="icon" viewBox="0 -960 960 960"><path d="M280-400q-33 0-56.5-23.5T200-480q0-33 23.5-56.5T280-560q33 0 56.5 23.5T360-480q0 33-23.5 56.5T280-400Zm0 160q-100 0-170-70T40-480q0-100 70-170t170-70q67 0 121.5 33t86.5 87h352l120 120-180 180-80-60-80 60-85-60h-47q-32 54-86.5 87T280-240Zm0-80q56 0 98.5-34t56.5-86h125l58 41 82-61 71 55 75-75-40-40H435q-14-52-56.5-86T280-640q-66 0-113 47t-47 113q0 66 47 113t113 47Z"/></svg>
         </div>
+        <div class="app-bar__texts">
+            <h1 class="app-bar__title">星愿令</h1>
+            <p class="app-bar__subtitle">StarryPass · 确定性密码生成器</p>
+        </div>
+        <div class="app-bar__spacer"></div>
+        <button id="theme-toggle" class="icon-button icon-button--filled-tonal ripple" type="button"
+                aria-label="切换深色 / 浅色主题" title="切换主题">
+            <svg id="theme-icon" class="icon" viewBox="0 -960 960 960"><path id="theme-icon-path" d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q55 0 101-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z"/></svg>
+        </button>
+    </header>
 
-        <div id="footer">
-            <p>星愿令 Copyright © 2024 lingyicute</p>
-        </div>
+    <main class="content">
+
+        <!-- main generator card -->
+        <section class="card" aria-labelledby="gen-title">
+            <div class="card__header">
+                <div>
+                    <h2 class="card__title" id="gen-title">生成密码</h2>
+                    <p class="card__subtitle">同一主密码与代号，永远生成同一密码</p>
+                </div>
+                <div class="card__spacer"></div>
+                <button id="reset-btn" class="text-button ripple" type="button" disabled>
+                    <svg class="icon icon--18" viewBox="0 -960 960 960"><path d="M440-122q-121-15-200.5-105.5T160-440q0-66 26-126.5T260-672l57 57q-38 34-57.5 79T240-440q0 88 56 155.5T440-202v80Zm80 0v-80q87-16 143.5-83T720-440q0-100-70-170t-170-70h-3l44 44-56 56-140-140 140-140 56 56-44 44h3q134 0 227 93t93 227q0 121-79.5 211.5T520-122Z"/></svg>
+                    清空
+                </button>
+            </div>
+
+            <div class="field">
+                <input class="field__input" id="master-input" type="password" autocomplete="off"
+                       spellcheck="false" autocapitalize="off" placeholder=" " inputmode="text">
+                <svg class="field__icon icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm0-80h480v-400H240v400Zm240-120q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM360-640h240v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80ZM240-160v-400 400Z"/></svg>
+                <label class="field__label" for="master-input">主密码</label>
+                <button id="visibility-btn" class="icon-button field__action ripple" type="button"
+                        aria-label="显示主密码" aria-pressed="false" title="显示 / 隐藏">
+                    <svg class="icon" viewBox="0 -960 960 960"><path d="M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z"/></svg>
+                </button>
+            </div>
+
+            <div class="field">
+                <input class="field__input" id="code-input" type="text" autocomplete="off"
+                       spellcheck="false" autocapitalize="off" placeholder=" " inputmode="text">
+                <svg class="field__icon icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="m240-160 40-160H120l20-80h160l40-160H180l20-80h160l40-160h80l-40 160h160l40-160h80l-40 160h160l-20 80H660l-40 160h160l-20 80H600l-40 160h-80l40-160H360l-40 160h-80Zm140-240h160l40-160H420l-40 160Z"/></svg>
+                <label class="field__label" for="code-input">代号（如站点名 / 用途）</label>
+                <button id="clear-code-btn" class="icon-button field__action ripple" type="button"
+                        aria-label="清空代号" title="清空" disabled hidden>
+                    <svg class="icon" viewBox="0 -960 960 960"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>
+                </button>
+            </div>
+
+            <div class="result">
+                <div class="result__heading">
+                    <span class="result__caption">
+                        <svg class="icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg>
+                        生成结果
+                    </span>
+                    <span id="pwd-length" class="result__caption">16 位</span>
+                </div>
+
+                <div id="password-output" class="password password--empty" aria-live="polite">
+                    请输入主密码和代号
+                </div>
+
+                <div class="result__actions">
+                    <div class="strength" id="strength" data-level="0" aria-label="密码强度">
+                        <div class="strength__bars" aria-hidden="true">
+                            <span class="strength__bar"></span>
+                            <span class="strength__bar"></span>
+                            <span class="strength__bar"></span>
+                            <span class="strength__bar"></span>
+                        </div>
+                        <span class="strength__label" id="strength-label">—</span>
+                    </div>
+                    <button id="copy-btn" class="filled-button ripple" type="button" disabled>
+                        <svg class="icon icon--18" viewBox="0 -960 960 960" aria-hidden="true"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg>
+                        <span id="copy-label">复制密码</span>
+                    </button>
+                </div>
+            </div>
+
+            <p class="notice">
+                <svg class="icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="M480-80 240-200v-280q0-138 70-245t170-155q100 48 170 155t70 245v280L480-80Zm0-108 120-49v-243q0-44-11.5-83.5T554-638l-74 74-74-74q-23 30-34.5 69.5T360-480v243l120 49Zm0-172Z"/></svg>
+                <span>密码在本地计算，<b>不存储、也不会上传到任何地方</b>。请牢记你的主密码，忘记后无法找回。</span>
+            </p>
+        </section>
+
+        <!-- how it works -->
+        <section class="card card--info" aria-labelledby="how-title">
+            <div class="card__header">
+                <div>
+                    <h2 class="card__title" id="how-title">如何使用</h2>
+                </div>
+            </div>
+            <ol class="steps">
+                <li class="step">
+                    <span class="step__num" aria-hidden="true">1</span>
+                    <div class="step__body">
+                        <p class="step__title">设置专属主密码</p>
+                        <p class="step__desc">只记这一个，例如一句话或一段只有你知道的内容。尽量不要包含自己的公开个人信息，例如生日、姓名缩写等——那样不安全。</p>
+                    </div>
+                </li>
+                <li class="step">
+                    <span class="step__num" aria-hidden="true">2</span>
+                    <div class="step__body">
+                        <p class="step__title">为每个网站取一个代号</p>
+                        <p class="step__desc">用代号区分不同账号，例如“Google”“Github”等。</p>
+                    </div>
+                </li>
+                <li class="step">
+                    <span class="step__num" aria-hidden="true">3</span>
+                    <div class="step__body">
+                        <p class="step__title">复制生成的密码使用</p>
+                        <p class="step__desc">同样的「主密码 + 代号」每次都会生成同一个密码。</p>
+                    </div>
+                </li>
+            </ol>
+        </section>
+    </main>
+
+    <footer class="footer">
+        星愿令 StarryPass © 2026 <a href="https://github.com/lingyicute" rel="noopener">lingyicute</a>
+    </footer>
+
+    <div class="snackbar" id="snackbar" role="status" aria-live="polite">
+        <svg class="icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>
+        <span id="snackbar-text">已复制到剪贴板</span>
     </div>
 
     <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./service-worker.js');
-        }
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            document.addEventListener("DOMContentLoaded", function () {
-                document.title = '';
+        (function () {
+            'use strict';
+
+            /* ============================================================
+               Crypto core — MD5 / HMAC-MD5
+               Byte-compatible with blueimp-md5 3.x and the legacy StarryPass
+               algorithm, implemented with modern APIs (TextEncoder).
+               ============================================================ */
+            function utf8ToBin(str) {
+                var bytes = new TextEncoder().encode(str), out = '', i;
+                for (i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+                return out;
+            }
+            function add32(a, b) { return ((a | 0) + (b | 0)) | 0; }
+            function rotl(n, s) { return ((n << s) | (n >>> (32 - s))) | 0; }
+            function cmn(q, a, b, x, s, t) {
+                return add32(rotl(add32(add32(add32(a, q), x), t), s), b);
+            }
+            function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
+            function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
+            function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+            function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+
+            function binl(bin) {
+                var n = [];
+                n[(bin.length >> 2) - 1] = undefined;
+                var i, bits;
+                for (i = 0; i < n.length; i++) n[i] = 0;
+                bits = 8 * bin.length;
+                for (i = 0; i < bits; i += 8) n[i >> 5] |= (255 & bin.charCodeAt(i / 8)) << (i % 32);
+                return n;
+            }
+
+            var S = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+                     5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+                     4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+                     6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21];
+            var K = [-680876936, -389564586, 606105819, -1044525330, -176418897, 1200080426, -1473231341, -45705983,
+                     1770035416, -1958414417, -42063, -1990404162, 1804603682, -40341101, -1502002290, 1236535329,
+                     -165796510, -1069501632, 643717713, -373897302, -701558691, 38016083, -660478335, -405537848,
+                     568446438, -1019803690, -187363961, 1163531501, -1444681467, -51403784, 1735328473, -1926607734,
+                     -378558, -2022574463, 1839030562, -35309556, -1530992060, 1272893353, -155497632, -1094730640,
+                     681279174, -358537222, -722521979, 76029189, -640364487, -421815835, 530742520, -995338651,
+                     -198630844, 1126891415, -1416354905, -57434055, 1700485571, -1894986606, -1051523, -2054922799,
+                     1873313359, -30611744, -1560198380, 1309151649, -145523070, -1120210379, 718787259, -343485551];
+
+            function md5blk(words, a0, b0, c0, d0) {
+                var A = a0, B = b0, C = c0, D = d0, F, g, tmp, i;
+                for (i = 0; i < 64; i++) {
+                    if (i < 16) { F = (B & C) | (~B & D); g = i; }
+                    else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) & 15; }
+                    else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) & 15; }
+                    else { F = C ^ (B | ~D); g = (7 * i) & 15; }
+                    tmp = D; D = C; C = B;
+                    B = add32(B, rotl(add32(add32(add32(A, F), words[g]), K[i]), S[i]));
+                    A = tmp;
+                }
+                return [add32(A, a0), add32(B, b0), add32(C, c0), add32(D, d0)];
+            }
+
+            function md5binl(bin) {
+                var words = binl(bin), bits = 8 * bin.length;
+                words[bits >> 5] |= 0x80 << (bits % 32);
+                words[14 + ((bits + 64) >>> 9 << 4)] = bits;
+                var a = 1732584193, b = -271733879, c = -1732584194, d = 271733878, i, block;
+                for (i = 0; i < words.length; i += 16) {
+                    block = md5blk(words.slice(i, i + 16), a, b, c, d);
+                    a = block[0]; b = block[1]; c = block[2]; d = block[3];
+                }
+                return [a, b, c, d];
+            }
+
+            function binl2hex(binl) {
+                var hex = '', i, w;
+                for (i = 0; i < binl.length * 32; i += 8) {
+                    w = binl[i >> 5] >>> (i % 32);
+                    hex += (w >>> 4 & 15).toString(16) + (w & 15).toString(16);
+                }
+                return hex;
+            }
+            function binl2bin(binl) {
+                var out = '', i;
+                for (i = 0; i < binl.length * 32; i += 8) out += String.fromCharCode(binl[i >> 5] >>> (i % 32) & 255);
+                return out;
+            }
+
+            /* blueimp-compatible md5(string, key, raw) */
+            function md5(str, key, raw) {
+                var bin = utf8ToBin(str);
+                if (!key) return raw ? binl2bin(md5binl(bin)) : binl2hex(md5binl(bin));
+
+                var kbin = utf8ToBin(key), kb = binl(kbin), ipad = [], opad = [], i;
+                if (kb.length > 16) kb = md5binl(kbin);
+                for (i = 0; i < 16; i++) {
+                    ipad[i] = 909522486 ^ (kb[i] | 0);
+                    opad[i] = 1549556828 ^ (kb[i] | 0);
+                }
+                var inner = binl2bin(md5binl(binl2bin(ipad) + bin));
+                var outer = md5binl(binl2bin(opad) + inner);
+                return raw ? binl2bin(outer) : binl2hex(outer);
+            }
+
+            /* Legacy StarryPass derivation, unchanged */
+            function derive(master, code) {
+                var n = md5(master, code, false);
+                var r = md5(n, 'snow', false);
+                var o = md5(n, 'kise', false).split('');
+                var u = r.split('');
+                var c;
+                for (c = 0; c <= 31; c++) {
+                    if (isNaN(u[c]) && 'sunlovesnow1990090127xykab'.search(o[c]) > -1) u[c] = u[c].toUpperCase();
+                }
+                var a = u.join(''), s = a.slice(0, 1);
+                return isNaN(s) ? a.slice(0, 16) : 'K' + a.slice(1, 16);
+            }
+
+            /* ============================================================
+               UI
+               ============================================================ */
+            var masterInput = document.getElementById('master-input');
+            var codeInput = document.getElementById('code-input');
+            var output = document.getElementById('password-output');
+            var strength = document.getElementById('strength');
+            var strengthLabel = document.getElementById('strength-label');
+            var pwdLength = document.getElementById('pwd-length');
+            var copyBtn = document.getElementById('copy-btn');
+            var copyLabel = document.getElementById('copy-label');
+            var resetBtn = document.getElementById('reset-btn');
+            var clearCodeBtn = document.getElementById('clear-code-btn');
+            var visibilityBtn = document.getElementById('visibility-btn');
+            var themeToggle = document.getElementById('theme-toggle');
+            var themeIconPath = document.getElementById('theme-icon-path');
+            var themeColorMeta = document.getElementById('theme-color-meta');
+            var snackbar = document.getElementById('snackbar');
+            var snackbarText = document.getElementById('snackbar-text');
+
+            var ICONS = {
+                eye: 'M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z',
+                eyeOff: 'm644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z',
+                copy: 'M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z',
+                check: 'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
+                close: 'm256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
+                moon: 'M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q55 0 101-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z',
+                sun: 'M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM200-440H40v-80h160v80Zm720 0H760v-80h160v80ZM440-760v-160h80v160h-80Zm0 720v-160h80v160h-80ZM256-650l-101-97 57-59 96 100-52 56Zm492 496-97-101 53-55 101 97-57 59Zm-98-550 97-101 59 57-100 96-56-52ZM154-212l101-97 55 53-97 101-59-57Zm326-268Z'
+            };
+
+            var snackbarTimer = null;
+            function showSnackbar(text) {
+                snackbarText.textContent = text;
+                snackbar.classList.add('is-visible');
+                clearTimeout(snackbarTimer);
+                snackbarTimer = setTimeout(function () {
+                    snackbar.classList.remove('is-visible');
+                }, 2200);
+            }
+
+            /* ------- theme ------- */
+            function applyTheme(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                themeIconPath.setAttribute('d', theme === 'dark' ? ICONS.sun : ICONS.moon);
+                themeToggle.setAttribute('aria-label', theme === 'dark' ? '切换到浅色主题' : '切换到深色主题');
+                var color = theme === 'dark' ? '#111318' : '#f9f9ff';
+                themeColorMeta.setAttribute('content', color);
+            }
+            function initTheme() {
+                var saved = null;
+                try { saved = localStorage.getItem('sp-theme'); } catch (e) { /* private mode */ }
+                var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                applyTheme(theme);
+            }
+            themeToggle.addEventListener('click', function () {
+                var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                applyTheme(next);
+                try { localStorage.setItem('sp-theme', next); } catch (e) { /* ignore */ }
             });
-        }
+
+            /* ------- password visibility ------- */
+            visibilityBtn.addEventListener('click', function () {
+                var showing = masterInput.type === 'text';
+                masterInput.type = showing ? 'password' : 'text';
+                visibilityBtn.setAttribute('aria-pressed', String(!showing));
+                visibilityBtn.setAttribute('aria-label', showing ? '显示主密码' : '隐藏主密码');
+                visibilityBtn.querySelector('svg path').setAttribute('d', showing ? ICONS.eye : ICONS.eyeOff);
+                masterInput.focus();
+            });
+
+            /* ------- strength ------- */
+            function strengthLevel(pwd) {
+                var hasLower = /[a-z]/.test(pwd), hasUpper = /[A-Z]/.test(pwd),
+                    hasDigit = /\d/.test(pwd), hasSymbol = /[^a-zA-Z0-9]/.test(pwd);
+                var pool = 0;
+                if (hasLower) pool += 26;
+                if (hasUpper) pool += 26;
+                if (hasDigit) pool += 10;
+                if (hasSymbol) pool += 33;
+                if (pool === 0) return 0;
+                var bits = pwd.length * Math.log2(pool);
+                return bits >= 90 ? 3 : bits >= 60 ? 2 : 1;
+            }
+            /* ------- generation ------- */
+            /* rAF-batched refresh: derive at most once per frame, write DOM
+               only when the rendered value actually changes */
+            var rafTimer = null;
+            var lastPwd = null;       /* last derived password shown */
+            var lastLevel = -1;       /* last strength level rendered */
+
+            function setStrength(level) {
+                strength.setAttribute('data-level', String(level));
+                strengthLabel.textContent = level === 3 ? '强' : level === 2 ? '中' : level === 1 ? '弱' : '—';
+            }
+
+            function refresh() {
+                var master = masterInput.value, code = codeInput.value;
+                var hasInput = master !== '' && code !== '';
+
+                clearCodeBtn.hidden = code === '';
+                clearCodeBtn.disabled = code === '';
+                resetBtn.disabled = !master && !code;
+                copyBtn.disabled = !hasInput;
+
+                if (!hasInput) {
+                    var placeholder = master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号';
+                    if (lastPwd !== null || output.textContent !== placeholder) {
+                        lastPwd = null;
+                        output.textContent = placeholder;
+                        output.classList.add('password--empty');
+                    }
+                    if (lastLevel !== -1) { lastLevel = -1; setStrength(0); }
+                    return;
+                }
+
+                var pwd = derive(master, code);
+                if (pwd !== lastPwd) {
+                    lastPwd = pwd;
+                    output.textContent = pwd;
+                    output.classList.remove('password--empty');
+                }
+
+                var level = strengthLevel(pwd);
+                if (level !== lastLevel) {
+                    lastLevel = level;
+                    setStrength(level);
+                }
+            }
+
+            function scheduleRefresh() {
+                if (rafTimer === null) {
+                    rafTimer = requestAnimationFrame(function () {
+                        rafTimer = null;
+                        refresh();
+                    });
+                }
+            }
+            masterInput.addEventListener('input', scheduleRefresh);
+            codeInput.addEventListener('input', scheduleRefresh);
+            /* IME composition: the value is read at frame time, so no extra
+               handling is needed — rAF always sees the latest committed text */
+            masterInput.addEventListener('compositionend', scheduleRefresh);
+            codeInput.addEventListener('compositionend', scheduleRefresh);
+
+            /* Enter on code field -> copy */
+            codeInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !copyBtn.disabled) copyBtn.click();
+            });
+
+            /* ------- copy ------- */
+            function copyText(text) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text).then(function () { return true; }, function () {
+                        return fallbackCopy(text);
+                    });
+                }
+                return Promise.resolve(fallbackCopy(text));
+            }
+            function fallbackCopy(text) {
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                ta.setSelectionRange(0, text.length);
+                var ok = false;
+                try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+                ta.remove();
+                return ok;
+            }
+            var copyResetTimer = null;
+            copyBtn.addEventListener('click', function () {
+                if (copyBtn.disabled) return;
+                var pwd = output.textContent;
+                copyText(pwd).then(function (ok) {
+                    if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
+                    copyBtn.classList.add('is-copied');
+                    copyLabel.textContent = '已复制';
+                    copyBtn.querySelector('svg path').setAttribute('d', ICONS.check);
+                    showSnackbar('密码已复制到剪贴板');
+                    clearTimeout(copyResetTimer);
+                    copyResetTimer = setTimeout(function () {
+                        copyBtn.classList.remove('is-copied');
+                        copyLabel.textContent = '复制密码';
+                        copyBtn.querySelector('svg path').setAttribute('d', ICONS.copy);
+                    }, 1800);
+                });
+            });
+
+            /* ------- clear ------- */
+            resetBtn.addEventListener('click', function () {
+                masterInput.value = '';
+                codeInput.value = '';
+                refresh();
+                masterInput.focus();
+            });
+            clearCodeBtn.addEventListener('click', function () {
+                codeInput.value = '';
+                refresh();
+                codeInput.focus();
+            });
+
+            /* ------- ripple ------- */
+            document.querySelectorAll('.ripple').forEach(function (btn) {
+                btn.addEventListener('pointerdown', function (e) {
+                    var rect = btn.getBoundingClientRect();
+                    var size = Math.max(rect.width, rect.height) * 2.2;
+                    var wave = document.createElement('span');
+                    wave.className = 'ripple-wave';
+                    wave.style.width = wave.style.height = size + 'px';
+                    wave.style.left = (e.clientX - rect.left - size / 2) + 'px';
+                    wave.style.top = (e.clientY - rect.top - size / 2) + 'px';
+                    btn.appendChild(wave);
+                    wave.addEventListener('animationend', function () { wave.remove(); });
+                });
+            });
+
+            initTheme();
+            refresh();
+
+            /* PWA service worker (optional, cached by GitHub Pages) */
+            if ('serviceWorker' in navigator && location.protocol === 'https:') {
+                window.addEventListener('load', function () {
+                    navigator.serviceWorker.register('./service-worker.js').catch(function () { /* offline-safe */ });
+                });
+            }
+        })();
     </script>
-    <script src="./assets/js/app.js?id=f61affe93bf8d529110a" type="text/javascript"></script>
-
 </body>
-
 </html>
