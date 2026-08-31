@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>星愿令 StarryPass · 密码生成器</title>
-    <meta name="description" content="简单方便防破解，不一样的密码管理工具。基于主密码与代号的本地确定性密码生成器。">
+    <title>星愿令 StarryPass · 确定性密码生成器</title>
+    <meta name="description" content="简单方便防破解，不一样的密码管理工具">
     <meta name="theme-color" content="#f9f9ff" id="theme-color-meta">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -720,7 +720,7 @@
 
             <p class="notice">
                 <svg class="icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="M480-80 240-200v-280q0-138 70-245t170-155q100 48 170 155t70 245v280L480-80Zm0-108 120-49v-243q0-44-11.5-83.5T554-638l-74 74-74-74q-23 30-34.5 69.5T360-480v243l120 49Zm0-172Z"/></svg>
-                <span>密码在本地计算，<b>不存储、不上传</b>。请牢记你的主密码，忘记后无法找回。</span>
+                <span>密码在本地计算，<b>不存储、也不会上传到任何地方</b>。请牢记你的主密码，忘记后无法找回。</span>
             </p>
         </section>
 
@@ -736,21 +736,21 @@
                     <span class="step__num" aria-hidden="true">1</span>
                     <div class="step__body">
                         <p class="step__title">设置专属主密码</p>
-                        <p class="step__desc">只记这一个，例如一句话或一段只有你知道的内容。</p>
+                        <p class="step__desc">只记这一个，例如一句话或一段只有你知道的内容。尽量不要包含自己的公开个人信息，例如生日、姓名缩写等——那样不安全。</p>
                     </div>
                 </li>
                 <li class="step">
                     <span class="step__num" aria-hidden="true">2</span>
                     <div class="step__body">
                         <p class="step__title">为每个网站取一个代号</p>
-                        <p class="step__desc">如 weibo、github、邮箱，用代号区分不同账号。</p>
+                        <p class="step__desc">用代号区分不同账号，例如“Google”“Github”等。</p>
                     </div>
                 </li>
                 <li class="step">
                     <span class="step__num" aria-hidden="true">3</span>
                     <div class="step__body">
                         <p class="step__title">复制生成的密码使用</p>
-                        <p class="step__desc">同样的「主密码 + 代号」每次都会生成同一个密码，无需保存。</p>
+                        <p class="step__desc">同样的「主密码 + 代号」每次都会生成同一个密码。</p>
                     </div>
                 </li>
             </ol>
@@ -758,7 +758,7 @@
     </main>
 
     <footer class="footer">
-        星愿令 StarryPass · 纯前端本地计算 · © 2024 <a href="https://github.com/lingyicute/StarryPass" rel="noopener">lingyicute</a>
+        星愿令 StarryPass © 2026 <a href="https://github.com/lingyicute" rel="noopener">lingyicute</a>
     </footer>
 
     <div class="snackbar" id="snackbar" role="status" aria-live="polite">
