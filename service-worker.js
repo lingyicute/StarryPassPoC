@@ -1,1 +1,44 @@
-let timestamp = "1788758196", VERSION = "precache-v" + timestamp, RUNTIME = "runtime-v" + timestamp; const PRECACHE_URLS = ["/"]; self.addEventListener("install", (e => { e.waitUntil(caches.open(VERSION).then((e => e.addAll(PRECACHE_URLS))).then(self.skipWaiting())) })), self.addEventListener("activate", (e => { const t = [VERSION, RUNTIME]; e.waitUntil(caches.keys().then((e => e.filter((e => !t.includes(e))))).then((e => Promise.all(e.map((e => caches.delete(e)))))).then((() => self.clients.claim()))) })), self.addEventListener("fetch", (e => { e.request.url.startsWith(self.location.origin) && e.respondWith(caches.match(e.request).then((t => t || caches.open(RUNTIME).then((t => fetch(e.request).then((s => t.put(e.request, s.clone()).then((() => s))))))))) }));
+const TIMESTAMP = "1793008800";
+const VERSION = "spv2-precache-v" + TIMESTAMP;
+const RUNTIME = "spv2-runtime-v" + TIMESTAMP;
+const PRECACHE_URLS = [
+    "./",
+    "./index.html",
+    "./assets/js/spv2-core.js",
+    "./assets/js/spv2-worker.js"
+];
+
+self.addEventListener("install", (event) => {
+    event.waitUntil(
+        caches.open(VERSION)
+            .then((cache) => cache.addAll(PRECACHE_URLS))
+            .then(() => self.skipWaiting())
+    );
+});
+
+self.addEventListener("activate", (event) => {
+    const keep = [VERSION, RUNTIME];
+    event.waitUntil(
+        caches.keys()
+            .then((keys) => Promise.all(
+                keys.filter((key) => !keep.includes(key)).map((key) => caches.delete(key))
+            ))
+            .then(() => self.clients.claim())
+    );
+});
+
+self.addEventListener("fetch", (event) => {
+    if (event.request.method !== "GET" || !event.request.url.startsWith(self.location.origin)) return;
+    event.respondWith(
+        caches.match(event.request).then((cached) => (
+            cached || caches.open(RUNTIME).then((cache) => (
+                fetch(event.request).then((response) => {
+                    if (response && response.status === 200) {
+                        cache.put(event.request, response.clone());
+                    }
+                    return response;
+                })
+            ))
+        ))
+    );
+});
