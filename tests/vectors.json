@@ -1,0 +1,9 @@
+[
+  {"args": ["correct horse battery staple", "github", "standard", 1, 16, "full"], "pwd": "WueNKY^SRHRh4!DL"},
+  {"args": ["星垂平野阔，月涌大江流！2026", "  GitHub  ", "standard", 1, 20, "full"], "pwd": "iOIpSEcuP&en$f7=5N&^"},
+  {"args": ["星垂平野阔，月涌大江流！2026", "GitHub", "standard", 1, 20, "full"], "pwd": "iOIpSEcuP&en$f7=5N&^"},
+  {"args": ["café-secret", "proton", "standard", 2, 24, "alnum"], "pwd": "BVdJi2mXRAcAtznHk5BVqaFP"},
+  {"args": ["cafe\u0301-secret", "proton", "standard", 2, 24, "alnum"], "pwd": "BVdJi2mXRAcAtznHk5BVqaFP"},
+  {"args": ["银行卡主口令#9527", "cmb-card", "standard", 1, 6, "pin"], "pwd": "211842"},
+  {"args": ["UltraSecretVaultPassphrase!2026", "root-ca", "paranoid", 1, 32, "full"], "pwd": "D@O4cIAzPrFyae#lWPKOttSVVwBzQucN"}
+]
