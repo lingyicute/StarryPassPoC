@@ -625,6 +625,65 @@
             contain-intrinsic-size: auto 400px;
         }
 
+
+        .strength[data-level="4"] .strength__bar { background: var(--md-sys-color-primary); }
+        .strength[data-level="4"] .strength__label { color: var(--md-sys-color-primary); font-weight: 600; }
+
+        .policy {
+            margin: 4px 0 12px;
+            border-radius: var(--md-sys-shape-corner-large);
+            background: var(--md-sys-color-surface-container-high);
+            border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
+        }
+        .policy > summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 12px 16px;
+            font-size: 13.5px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .policy > summary::-webkit-details-marker { display: none; }
+        .policy > summary::after { content: "▾"; opacity: .55; }
+        .policy[open] > summary::after { content: "▴"; }
+        .policy__body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+        .policy__label { font-size: 12px; font-weight: 500; letter-spacing: .4px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 6px; }
+        .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .chip {
+            height: 32px; padding: 0 12px; border-radius: var(--md-sys-shape-corner-full);
+            font-size: 13px; font-weight: 500;
+            background: var(--md-sys-color-surface-container-highest);
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        .chip[aria-pressed="true"] {
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+        }
+        .counter-row { display: flex; align-items: center; gap: 8px; }
+        .counter-row input {
+            width: 72px; height: 36px; text-align: center; font: inherit;
+            border: none; border-radius: 8px;
+            background: var(--md-sys-color-surface-container-highest);
+            color: var(--md-sys-color-on-surface);
+        }
+        .derive-bar {
+            height: 3px; margin: 8px 0 0; border-radius: 2px; overflow: hidden;
+            background: transparent;
+        }
+        .derive-bar.is-busy {
+            background: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent);
+        }
+        .derive-bar.is-busy::after {
+            content: ""; display: block; height: 100%; width: 40%;
+            background: var(--md-sys-color-primary);
+            animation: derive-slide 1s cubic-bezier(.2,0,0,1) infinite;
+        }
+        @keyframes derive-slide { from { transform: translateX(-120%); } to { transform: translateX(280%); } }
+
         /* ============================================================
            Small screens
            ============================================================ */
@@ -652,7 +711,7 @@
         </div>
         <div class="app-bar__texts">
             <h1 class="app-bar__title">星愿令</h1>
-            <p class="app-bar__subtitle">StarryPass · 确定性密码生成器</p>
+            <p class="app-bar__subtitle">StarryPass v2 · 内存硬化确定性密码</p>
         </div>
         <div class="app-bar__spacer"></div>
         <button id="theme-toggle" class="icon-button icon-button--filled-tonal ripple" type="button"
@@ -668,7 +727,7 @@
             <div class="card__header">
                 <div>
                     <h2 class="card__title" id="gen-title">生成密码</h2>
-                    <p class="card__subtitle">同一主密码与代号，永远生成同一密码</p>
+                    <p class="card__subtitle">同一主密码、代号与策略，永远生成同一密码</p>
                 </div>
                 <div class="card__spacer"></div>
                 <button id="reset-btn" class="text-button ripple" type="button" disabled>
@@ -699,6 +758,44 @@
                 </button>
             </div>
 
+
+            <details class="policy" id="policy">
+                <summary>站点策略 · 轮换 / 长度 / 字符集 / 强度档</summary>
+                <div class="policy__body">
+                    <div>
+                        <div class="policy__label">长度</div>
+                        <div class="chips" id="len-chips" role="group" aria-label="密码长度">
+                            <button type="button" class="chip" data-len="16" aria-pressed="true">16</button>
+                            <button type="button" class="chip" data-len="20" aria-pressed="false">20</button>
+                            <button type="button" class="chip" data-len="24" aria-pressed="false">24</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="policy__label">字符集</div>
+                        <div class="chips" id="mode-chips" role="group" aria-label="字符集">
+                            <button type="button" class="chip" data-mode="full" aria-pressed="true">含符号</button>
+                            <button type="button" class="chip" data-mode="alnum" aria-pressed="false">字母数字</button>
+                            <button type="button" class="chip" data-mode="pin" aria-pressed="false">PIN</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="policy__label">轮换序号（单站泄露时递增即可换密）</div>
+                        <div class="counter-row">
+                            <button type="button" class="icon-button" id="ctr-dec" aria-label="序号减一">−</button>
+                            <input id="counter-input" type="number" min="1" max="9999" value="1" inputmode="numeric">
+                            <button type="button" class="icon-button" id="ctr-inc" aria-label="序号加一">+</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="policy__label">抗破解档位</div>
+                        <div class="chips" id="tier-chips" role="group" aria-label="强度档">
+                            <button type="button" class="chip" data-tier="standard" aria-pressed="true">标准 · 64 MiB</button>
+                            <button type="button" class="chip" data-tier="paranoid" aria-pressed="false">极高 · 256 MiB</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
             <div class="result">
                 <div class="result__heading">
                     <span class="result__caption">
@@ -711,6 +808,7 @@
                 <div id="password-output" class="password password--empty" aria-live="polite">
                     请输入主密码和代号
                 </div>
+                <div class="derive-bar" id="derive-bar" hidden></div>
 
                 <div class="result__actions">
                     <div class="strength" id="strength" data-level="0" aria-label="密码强度">
@@ -731,7 +829,7 @@
 
             <p class="notice">
                 <svg class="icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg>
-                <span>密码在本地计算，<b>不存储、也不会上传到任何地方</b>。请牢记你的主密码，忘记后无法找回。</span>
+                <span>v2 使用 Argon2id（RFC 9106）内存硬化派生，全程在本机计算，<b>不存储、不上传</b>。请牢记主密码；忘记后无法找回。升级会改变输出，旧账号请重新设置。</span>
             </p>
         </section>
 
@@ -761,7 +859,7 @@
                     <span class="step__num" aria-hidden="true">3</span>
                     <div class="step__body">
                         <p class="step__title">复制生成的密码使用</p>
-                        <p class="step__desc">同样的「主密码 + 代号」每次都会生成同一个密码。</p>
+                        <p class="step__desc">同样的「主密码 + 代号 + 策略」每次都会生成同一个密码。某站泄露时只需把轮换序号加一。</p>
                     </div>
                 </li>
             </ol>
@@ -777,126 +875,84 @@
         <span id="snackbar-text">已复制到剪贴板</span>
     </div>
 
+    <script src="./assets/js/spv2-core.js"></script>
     <script>
         (function () {
             'use strict';
 
-            /* ============================================================
-               Crypto core — MD5 / HMAC-MD5
-               Byte-compatible with blueimp-md5 3.x and the legacy StarryPass
-               algorithm, implemented with modern APIs (TextEncoder).
-               ============================================================ */
-            function utf8ToBin(str) {
-                var bytes = new TextEncoder().encode(str), out = '', i;
-                for (i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
-                return out;
-            }
-            function add32(a, b) { return ((a | 0) + (b | 0)) | 0; }
-            function rotl(n, s) { return ((n << s) | (n >>> (32 - s))) | 0; }
-            function cmn(q, a, b, x, s, t) {
-                return add32(rotl(add32(add32(add32(a, q), x), t), s), b);
-            }
-            function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
-            function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
-            function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
-            function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+            var WEAK_ROOTS = {
+                '123456':1,'12345678':1,'123456789':1,'1234567890':1,'111111':1,'000000':1,
+                '666666':1,'888888':1,'5201314':1,'password':1,'passwd':1,'qwerty':1,
+                'qwertyuiop':1,'asdfgh':1,'asdfghjkl':1,'zxcvbn':1,'zxcvbnm':1,'abc123':1,
+                'iloveyou':1,'admin':1,'administrator':1,'root':1,'letmein':1,'welcome':1,
+                'monkey':1,'dragon':1,'master':1,'starrypass':1,'huami':1,'flowerpassword':1,
+                '1q2w3e4r':1,'qazwsx':1
+            };
+            var KB_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 
-            function binl(bin) {
-                var n = [];
-                n[(bin.length >> 2) - 1] = undefined;
-                var i, bits;
-                for (i = 0; i < n.length; i++) n[i] = 0;
-                bits = 8 * bin.length;
-                for (i = 0; i < bits; i += 8) n[i >> 5] |= (255 & bin.charCodeAt(i / 8)) << (i % 32);
-                return n;
-            }
-
-            var S = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-                     5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-                     4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-                     6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21];
-            var K = [-680876936, -389564586, 606105819, -1044525330, -176418897, 1200080426, -1473231341, -45705983,
-                     1770035416, -1958414417, -42063, -1990404162, 1804603682, -40341101, -1502002290, 1236535329,
-                     -165796510, -1069501632, 643717713, -373897302, -701558691, 38016083, -660478335, -405537848,
-                     568446438, -1019803690, -187363961, 1163531501, -1444681467, -51403784, 1735328473, -1926607734,
-                     -378558, -2022574463, 1839030562, -35309556, -1530992060, 1272893353, -155497632, -1094730640,
-                     681279174, -358537222, -722521979, 76029189, -640364487, -421815835, 530742520, -995338651,
-                     -198630844, 1126891415, -1416354905, -57434055, 1700485571, -1894986606, -1051523, -2054922799,
-                     1873313359, -30611744, -1560198380, 1309151649, -145523070, -1120210379, 718787259, -343485551];
-
-            function md5blk(words, a0, b0, c0, d0) {
-                var A = a0, B = b0, C = c0, D = d0, F, g, tmp, i;
-                for (i = 0; i < 64; i++) {
-                    if (i < 16) { F = (B & C) | (~B & D); g = i; }
-                    else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) & 15; }
-                    else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) & 15; }
-                    else { F = C ^ (B | ~D); g = (7 * i) & 15; }
-                    tmp = D; D = C; C = B;
-                    B = add32(B, rotl(add32(add32(add32(A, F), words[g]), K[i]), S[i]));
-                    A = tmp;
+            function isKeyboardStep(a, b) {
+                var la = a.toLowerCase(), lb = b.toLowerCase(), i, ia, ib;
+                if (la === lb) return false;
+                for (i = 0; i < KB_ROWS.length; i++) {
+                    ia = KB_ROWS[i].indexOf(la); ib = KB_ROWS[i].indexOf(lb);
+                    if (ia !== -1 && ib !== -1 && Math.abs(ia - ib) === 1) return true;
                 }
-                return [add32(A, a0), add32(B, b0), add32(C, c0), add32(D, d0)];
+                return false;
             }
 
-            function md5binl(bin) {
-                var words = binl(bin), bits = 8 * bin.length;
-                words[bits >> 5] |= 0x80 << (bits % 32);
-                words[14 + ((bits + 64) >>> 9 << 4)] = bits;
-                var a = 1732584193, b = -271733879, c = -1732584194, d = 271733878, i, block;
-                for (i = 0; i < words.length; i += 16) {
-                    block = md5blk(words.slice(i, i + 16), a, b, c, d);
-                    a = block[0]; b = block[1]; c = block[2]; d = block[3];
+            function estimateCrackResistance(master, code, tier, mode, length) {
+                var m = String(master || '').normalize('NFC');
+                var c = String(code || '').trim().normalize('NFC');
+                if (!m || !c) return { level: 0, label: '—', bits: 0 };
+                var mLower = m.toLowerCase(), cLower = c.toLowerCase();
+                if (cLower.length >= 2 && mLower.indexOf(cLower) !== -1)
+                    return { level: 1, label: '弱 · 主密码勿含代号', bits: 16 };
+                if (/^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(m))
+                    return { level: 1, label: '弱 · 勿用纯日期', bits: 15 };
+                var deLeet = mLower.replace(/[@4]/g, 'a').replace(/0/g, 'o').replace(/[1!|]/g, 'i')
+                    .replace(/3/g, 'e').replace(/[$5]/g, 's').replace(/7/g, 't');
+                var stem = deLeet.replace(/[0-9!@#$%^&*()_+\-=[\]{};:"\\|,.<>/?~`]+$/g, '');
+                if (WEAK_ROOTS[mLower] || (WEAK_ROOTS[stem] && m.length - stem.length <= 6))
+                    return { level: 1, label: '弱 · 含常见弱口令', bits: 18 };
+
+                var cps = Array.from(m);
+                var hasLower = false, hasUpper = false, hasDigit = false, hasSym = false, i, ch, cp;
+                for (i = 0; i < cps.length; i++) {
+                    cp = cps[i].codePointAt(0);
+                    if (cp >= 97 && cp <= 122) hasLower = true;
+                    else if (cp >= 65 && cp <= 90) hasUpper = true;
+                    else if (cp >= 48 && cp <= 57) hasDigit = true;
+                    else if (cp >= 32 && cp <= 126) hasSym = true;
                 }
-                return [a, b, c, d];
-            }
-
-            function binl2hex(binl) {
-                var hex = '', i, w;
-                for (i = 0; i < binl.length * 32; i += 8) {
-                    w = binl[i >> 5] >>> (i % 32);
-                    hex += (w >>> 4 & 15).toString(16) + (w & 15).toString(16);
+                var asciiPool = (hasLower ? 26 : 0) + (hasUpper ? 26 : 0) + (hasDigit ? 10 : 0) + (hasSym ? 33 : 0);
+                var asciiBits = asciiPool > 0 ? Math.log2(asciiPool) : 0;
+                var bits = 0, seen = Object.create(null), prevCh, prevCp, count, baseBits;
+                for (i = 0; i < cps.length; i++) {
+                    ch = cps[i]; cp = ch.codePointAt(0);
+                    if (cp >= 32 && cp <= 126) baseBits = asciiBits;
+                    else if ((cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0x20000 && cp <= 0x2ebef)) baseBits = 7.5;
+                    else baseBits = 6.5;
+                    prevCh = i > 0 ? cps[i - 1] : null;
+                    prevCp = prevCh ? prevCh.codePointAt(0) : -999;
+                    count = seen[ch] || 0;
+                    if (prevCh === ch) bits += 0.5;
+                    else if (Math.abs(cp - prevCp) === 1 || (prevCh && cp < 128 && prevCp < 128 && isKeyboardStep(prevCh, ch))) bits += 1.2;
+                    else if (count === 0) bits += baseBits;
+                    else if (count === 1) bits += baseBits * 0.65;
+                    else bits += baseBits * 0.35;
+                    seen[ch] = count + 1;
                 }
-                return hex;
-            }
-            function binl2bin(binl) {
-                var out = '', i;
-                for (i = 0; i < binl.length * 32; i += 8) out += String.fromCharCode(binl[i >> 5] >>> (i % 32) & 255);
-                return out;
-            }
-
-            /* blueimp-compatible md5(string, key, raw) */
-            function md5(str, key, raw) {
-                var bin = utf8ToBin(str);
-                if (!key) return raw ? binl2bin(md5binl(bin)) : binl2hex(md5binl(bin));
-
-                var kbin = utf8ToBin(key), kb = binl(kbin), ipad = [], opad = [], i;
-                if (kb.length > 16) kb = md5binl(kbin);
-                for (i = 0; i < 16; i++) {
-                    ipad[i] = 909522486 ^ (kb[i] | 0);
-                    opad[i] = 1549556828 ^ (kb[i] | 0);
+                if (tier === 'paranoid') bits += 3;
+                if (mode === 'pin' && length <= 8) {
+                    if (bits < 44) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(bits) };
+                    return { level: 2, label: 'PIN · 依赖终端限次', bits: Math.round(bits) };
                 }
-                var inner = binl2bin(md5binl(binl2bin(ipad) + bin));
-                var outer = md5binl(binl2bin(opad) + inner);
-                return raw ? binl2bin(outer) : binl2hex(outer);
+                if (bits < 44) return { level: 1, label: '弱 · 建议加长主密码', bits: Math.round(bits) };
+                if (bits < 64) return { level: 2, label: '中 · 建议用长句口令', bits: Math.round(bits) };
+                if (bits < 86) return { level: 3, label: '强 · 抗集群暴力破解', bits: Math.round(bits) };
+                return { level: 4, label: '极强 · 长期防破解', bits: Math.round(bits) };
             }
 
-            /* Legacy StarryPass derivation, unchanged */
-            function derive(master, code) {
-                var n = md5(master, code, false);
-                var r = md5(n, 'snow', false);
-                var o = md5(n, 'kise', false).split('');
-                var u = r.split('');
-                var c;
-                for (c = 0; c <= 31; c++) {
-                    if (isNaN(u[c]) && 'sunlovesnow1990090127xykab'.search(o[c]) > -1) u[c] = u[c].toUpperCase();
-                }
-                var a = u.join(''), s = a.slice(0, 1);
-                return isNaN(s) ? a.slice(0, 16) : 'K' + a.slice(1, 16);
-            }
-
-            /* ============================================================
-               UI
-               ============================================================ */
             var masterInput = document.getElementById('master-input');
             var codeInput = document.getElementById('code-input');
             var output = document.getElementById('password-output');
@@ -913,13 +969,27 @@
             var themeColorMeta = document.getElementById('theme-color-meta');
             var snackbar = document.getElementById('snackbar');
             var snackbarText = document.getElementById('snackbar-text');
+            var deriveBar = document.getElementById('derive-bar');
+            var counterInput = document.getElementById('counter-input');
+
+            var state = { length: 16, mode: 'full', counter: 1, tier: 'standard' };
+            var lastPwd = null, lastLevel = -1, deriveId = 0, debounceTimer = null;
+            var worker = null, localEngine = null, inflight = false;
+
+            try {
+                worker = new Worker('./assets/js/spv2-worker.js');
+            } catch (e) {
+                worker = null;
+            }
+            if (!worker && typeof spv2CoreFactory === 'function') {
+                localEngine = spv2CoreFactory(null, false);
+            }
 
             var ICONS = {
                 eye: 'M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z',
                 eyeOff: 'm644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z',
                 copy: 'M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z',
                 check: 'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
-                close: 'm256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
                 moon: 'M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q55 0 101-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z',
                 sun: 'M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM200-440H40v-80h160v80Zm720 0H760v-80h160v80ZM440-760v-160h80v160h-80Zm0 720v-160h80v160h-80ZM256-650l-101-97 57-59 96 100-52 56Zm492 496-97-101 53-55 101 97-57 59Zm-98-550 97-101 59 57-100 96-56-52ZM154-212l101-97 55 53-97 101-59-57Zm326-268Z'
             };
@@ -929,32 +999,26 @@
                 snackbarText.textContent = text;
                 snackbar.classList.add('is-visible');
                 clearTimeout(snackbarTimer);
-                snackbarTimer = setTimeout(function () {
-                    snackbar.classList.remove('is-visible');
-                }, 2200);
+                snackbarTimer = setTimeout(function () { snackbar.classList.remove('is-visible'); }, 2200);
             }
 
-            /* ------- theme ------- */
             function applyTheme(theme) {
                 document.documentElement.setAttribute('data-theme', theme);
                 themeIconPath.setAttribute('d', theme === 'dark' ? ICONS.sun : ICONS.moon);
                 themeToggle.setAttribute('aria-label', theme === 'dark' ? '切换到浅色主题' : '切换到深色主题');
-                var color = theme === 'dark' ? '#111318' : '#f9f9ff';
-                themeColorMeta.setAttribute('content', color);
+                themeColorMeta.setAttribute('content', theme === 'dark' ? '#111318' : '#f9f9ff');
             }
             function initTheme() {
                 var saved = null;
-                try { saved = localStorage.getItem('sp-theme'); } catch (e) { /* private mode */ }
-                var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-                applyTheme(theme);
+                try { saved = localStorage.getItem('sp-theme'); } catch (e) {}
+                applyTheme(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
             }
             themeToggle.addEventListener('click', function () {
                 var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
                 applyTheme(next);
-                try { localStorage.setItem('sp-theme', next); } catch (e) { /* ignore */ }
+                try { localStorage.setItem('sp-theme', next); } catch (e) {}
             });
 
-            /* ------- password visibility ------- */
             visibilityBtn.addEventListener('click', function () {
                 var showing = masterInput.type === 'text';
                 masterInput.type = showing ? 'password' : 'text';
@@ -964,86 +1028,142 @@
                 masterInput.focus();
             });
 
-            /* ------- strength ------- */
-            function strengthLevel(pwd) {
-                var hasLower = /[a-z]/.test(pwd), hasUpper = /[A-Z]/.test(pwd),
-                    hasDigit = /\d/.test(pwd), hasSymbol = /[^a-zA-Z0-9]/.test(pwd);
-                var pool = 0;
-                if (hasLower) pool += 26;
-                if (hasUpper) pool += 26;
-                if (hasDigit) pool += 10;
-                if (hasSymbol) pool += 33;
-                if (pool === 0) return 0;
-                var bits = pwd.length * Math.log2(pool);
-                return bits >= 90 ? 3 : bits >= 60 ? 2 : 1;
+            function setChipGroup(root, attr, value) {
+                root.querySelectorAll('.chip').forEach(function (btn) {
+                    btn.setAttribute('aria-pressed', String(btn.getAttribute(attr) === String(value)));
+                });
             }
-            /* ------- generation ------- */
-            /* rAF-batched refresh: derive at most once per frame, write DOM
-               only when the rendered value actually changes */
-            var rafTimer = null;
-            var lastPwd = null;       /* last derived password shown */
-            var lastLevel = -1;       /* last strength level rendered */
+            document.getElementById('len-chips').addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-len]'); if (!btn) return;
+                state.length = parseInt(btn.getAttribute('data-len'), 10);
+                setChipGroup(this, 'data-len', state.length);
+                pwdLength.textContent = state.length + ' 位';
+                scheduleRefresh();
+            });
+            document.getElementById('mode-chips').addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-mode]'); if (!btn) return;
+                state.mode = btn.getAttribute('data-mode');
+                setChipGroup(this, 'data-mode', state.mode);
+                if (state.mode === 'pin' && state.length > 8) {
+                    state.length = 6;
+                    setChipGroup(document.getElementById('len-chips'), 'data-len', 16);
+                    pwdLength.textContent = '6 位';
+                }
+                scheduleRefresh();
+            });
+            document.getElementById('tier-chips').addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-tier]'); if (!btn) return;
+                state.tier = btn.getAttribute('data-tier');
+                setChipGroup(this, 'data-tier', state.tier);
+                scheduleRefresh();
+            });
+            function clampCounter() {
+                var n = parseInt(counterInput.value, 10);
+                if (!n || n < 1) n = 1;
+                if (n > 9999) n = 9999;
+                counterInput.value = String(n);
+                state.counter = n;
+            }
+            document.getElementById('ctr-dec').addEventListener('click', function () {
+                counterInput.value = String(Math.max(1, (parseInt(counterInput.value, 10) || 1) - 1));
+                clampCounter(); scheduleRefresh();
+            });
+            document.getElementById('ctr-inc').addEventListener('click', function () {
+                counterInput.value = String(Math.min(9999, (parseInt(counterInput.value, 10) || 1) + 1));
+                clampCounter(); scheduleRefresh();
+            });
+            counterInput.addEventListener('change', function () { clampCounter(); scheduleRefresh(); });
 
-            function setStrength(level) {
-                strength.setAttribute('data-level', String(level));
-                strengthLabel.textContent = level === 3 ? '强' : level === 2 ? '中' : level === 1 ? '弱' : '—';
+            function setStrength(est) {
+                strength.setAttribute('data-level', String(est.level));
+                strengthLabel.textContent = est.label;
+            }
+            function setBusy(on) {
+                deriveBar.hidden = !on;
+                deriveBar.classList.toggle('is-busy', on);
+            }
+
+            function showEmpty(placeholder) {
+                lastPwd = null;
+                output.textContent = placeholder;
+                output.classList.add('password--empty');
+                copyBtn.disabled = true;
+                setStrength({ level: 0, label: '—' });
+                lastLevel = -1;
+                setBusy(false);
+            }
+
+            function applyPassword(pwd, master, code) {
+                lastPwd = pwd;
+                output.textContent = pwd;
+                output.classList.remove('password--empty');
+                copyBtn.disabled = false;
+                var est = estimateCrackResistance(master, code, state.tier, state.mode, state.length);
+                setStrength(est);
+                lastLevel = est.level;
+                setBusy(false);
+            }
+
+            function derive(master, code, id) {
+                var payload = {
+                    id: id, type: 'derive', master: master, code: code,
+                    tier: state.tier, counter: state.counter, length: state.mode === 'pin' ? Math.min(state.length, 8) : state.length,
+                    mode: state.mode
+                };
+                if (state.mode === 'pin') pwdLength.textContent = payload.length + ' 位';
+                else pwdLength.textContent = state.length + ' 位';
+
+                if (worker) {
+                    inflight = true;
+                    setBusy(true);
+                    worker.postMessage(payload);
+                    return;
+                }
+                try {
+                    var res = localEngine.deriveSync(payload);
+                    if (id === deriveId) applyPassword(res.password, master, code);
+                } catch (err) {
+                    if (id === deriveId) showEmpty('派生失败，请重试');
+                }
+            }
+
+            if (worker) {
+                worker.onmessage = function (ev) {
+                    inflight = false;
+                    var data = ev.data || {};
+                    if (data.id !== deriveId) return;
+                    if (data.ok) applyPassword(data.password, masterInput.value, codeInput.value);
+                    else showEmpty(data.error === 'EMPTY_INPUT' ? '请填写完整的主密码和代号' : '派生失败，请重试');
+                };
             }
 
             function refresh() {
                 var master = masterInput.value, code = codeInput.value;
-                var hasInput = master !== '' && code !== '';
-
+                var hasInput = master !== '' && code.trim() !== '';
                 clearCodeBtn.hidden = code === '';
                 clearCodeBtn.disabled = code === '';
                 resetBtn.disabled = !master && !code;
-                copyBtn.disabled = !hasInput;
-
                 if (!hasInput) {
-                    var placeholder = master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号';
-                    if (lastPwd !== null || output.textContent !== placeholder) {
-                        lastPwd = null;
-                        output.textContent = placeholder;
-                        output.classList.add('password--empty');
-                    }
-                    if (lastLevel !== -1) { lastLevel = -1; setStrength(0); }
+                    showEmpty(master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号');
+                    copyBtn.disabled = true;
                     return;
                 }
-
-                var pwd = derive(master, code);
-                if (pwd !== lastPwd) {
-                    lastPwd = pwd;
-                    output.textContent = pwd;
-                    output.classList.remove('password--empty');
-                }
-
-                var level = strengthLevel(pwd);
-                if (level !== lastLevel) {
-                    lastLevel = level;
-                    setStrength(level);
-                }
+                deriveId += 1;
+                derive(master, code, deriveId);
             }
 
             function scheduleRefresh() {
-                if (rafTimer === null) {
-                    rafTimer = requestAnimationFrame(function () {
-                        rafTimer = null;
-                        refresh();
-                    });
-                }
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(refresh, 280);
             }
             masterInput.addEventListener('input', scheduleRefresh);
             codeInput.addEventListener('input', scheduleRefresh);
-            /* IME composition: the value is read at frame time, so no extra
-               handling is needed — rAF always sees the latest committed text */
             masterInput.addEventListener('compositionend', scheduleRefresh);
             codeInput.addEventListener('compositionend', scheduleRefresh);
-
-            /* Enter on code field -> copy */
             codeInput.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter' && !copyBtn.disabled) copyBtn.click();
             });
 
-            /* ------- copy ------- */
             function copyText(text) {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                     return navigator.clipboard.writeText(text).then(function () { return true; }, function () {
@@ -1054,14 +1174,9 @@
             }
             function fallbackCopy(text) {
                 var ta = document.createElement('textarea');
-                ta.value = text;
-                ta.setAttribute('readonly', '');
-                ta.style.position = 'fixed';
-                ta.style.top = '-1000px';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                ta.setSelectionRange(0, text.length);
+                ta.value = text; ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
                 var ok = false;
                 try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
                 ta.remove();
@@ -1070,8 +1185,7 @@
             var copyResetTimer = null;
             copyBtn.addEventListener('click', function () {
                 if (copyBtn.disabled) return;
-                var pwd = output.textContent;
-                copyText(pwd).then(function (ok) {
+                copyText(output.textContent).then(function (ok) {
                     if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
                     copyBtn.classList.add('is-copied');
                     copyLabel.textContent = '已复制';
@@ -1086,20 +1200,19 @@
                 });
             });
 
-            /* ------- clear ------- */
+            function wipe() {
+                if (worker) worker.postMessage({ type: 'wipe', id: 0 });
+                else if (localEngine) localEngine.wipeSession();
+            }
             resetBtn.addEventListener('click', function () {
-                masterInput.value = '';
-                codeInput.value = '';
-                refresh();
-                masterInput.focus();
+                masterInput.value = ''; codeInput.value = '';
+                wipe(); refresh(); masterInput.focus();
             });
             clearCodeBtn.addEventListener('click', function () {
-                codeInput.value = '';
-                refresh();
-                codeInput.focus();
+                codeInput.value = ''; refresh(); codeInput.focus();
             });
+            window.addEventListener('pagehide', wipe);
 
-            /* ------- ripple ------- */
             document.querySelectorAll('.ripple').forEach(function (btn) {
                 btn.addEventListener('pointerdown', function (e) {
                     var rect = btn.getBoundingClientRect();
@@ -1117,10 +1230,9 @@
             initTheme();
             refresh();
 
-            /* PWA service worker (optional, cached by GitHub Pages) */
             if ('serviceWorker' in navigator && location.protocol === 'https:') {
                 window.addEventListener('load', function () {
-                    navigator.serviceWorker.register('./service-worker.js').catch(function () { /* offline-safe */ });
+                    navigator.serviceWorker.register('./service-worker.js').catch(function () {});
                 });
             }
         })();
