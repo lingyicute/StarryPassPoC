@@ -9,7 +9,7 @@
 >
 > DO NOT USE THIS IN PRODUCTION. It has not been audited and violates the golden rule of "don't roll your own crypto".
 >
-> 👉 For the production-ready version that uses standard, battle-tested cryptographic libraries, please visit: [StarryPass](github.com/lingyicute/StarryPass)
+> 👉 For the production-ready version that uses standard, battle-tested cryptographic libraries, please visit: [StarryPass](https://github.com/lingyicute/StarryPass)
 
 ### 简单方便防破解，不一样的密码管理工具
 
