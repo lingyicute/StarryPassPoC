@@ -2,6 +2,15 @@
 
 ## Made with love ❤️
 
+> [!important]
+> ⚠️ SECURITY NOTICE  ⚠️
+>
+> This repository contains a hand-rolled implementation of the Argon2id algorithm. It was created as an intellectual exercise and a Proof of Concept (PoC) to understand how the algorithm works under the hood.
+>
+> DO NOT USE THIS IN PRODUCTION. It has not been audited and violates the golden rule of "don't roll your own crypto".
+>
+> 👉 For the production-ready version that uses standard, battle-tested cryptographic libraries, please visit: [StarryPass](github.com/lingyicute/StarryPass)
+
 ### 简单方便防破解，不一样的密码管理工具
 
 同一主密码 + 站点代号，本地确定性生成高熵密码。
