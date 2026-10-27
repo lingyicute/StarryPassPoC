@@ -32,6 +32,7 @@
 
 ```bash
 node tests/verify_spv2.js
+node tests/verify_strength.mjs
 ```
 
 ## 🌟 另请参阅

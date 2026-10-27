@@ -906,6 +906,26 @@
             };
             var KB_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 
+            // Check own keys only: Object.prototype names are not weak roots.
+            function isWeakRoot(value) {
+                var deLeet = value.replace(/[@4]/g, 'a').replace(/0/g, 'o').replace(/[1!|]/g, 'i')
+                    .replace(/3/g, 'e').replace(/[$5]/g, 's').replace(/7/g, 't');
+                return Object.prototype.hasOwnProperty.call(WEAK_ROOTS, value) ||
+                    Object.prototype.hasOwnProperty.call(WEAK_ROOTS, deLeet);
+            }
+
+            function hasWeakRoot(value) {
+                if (isWeakRoot(value)) return true;
+                // Strip BEFORE de-leeting so suffix digits do not turn into letters.
+                // Try every boundary to preserve digit-ending roots (e.g. abc123!).
+                var stem = value;
+                for (var i = 0; i < 8 && /[0-9!@#$%^&*()_+\-=[\]{};:"\\|,.<>/?~`]/.test(stem.slice(-1)); i++) {
+                    stem = stem.slice(0, -1);
+                    if (isWeakRoot(stem)) return true;
+                }
+                return false;
+            }
+
             function isKeyboardStep(a, b) {
                 var la = a.toLowerCase(), lb = b.toLowerCase(), i, ia, ib;
                 if (la === lb) return false;
@@ -925,11 +945,7 @@
                     return { level: 1, label: '弱 · 主密码勿含代号', bits: 16 };
                 if (/^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(m))
                     return { level: 1, label: '弱 · 勿用纯日期', bits: 15 };
-                var deLeet = mLower.replace(/[@4]/g, 'a').replace(/0/g, 'o').replace(/[1!|]/g, 'i')
-                    .replace(/3/g, 'e').replace(/[$5]/g, 's').replace(/7/g, 't');
-                var stem = deLeet.replace(/[0-9!@#$%^&*()_+\-=[\]{};:"\\|,.<>/?~`]+$/g, '');
-                if (WEAK_ROOTS[mLower] || WEAK_ROOTS[deLeet] ||
-                    (WEAK_ROOTS[stem] && m.length - stem.length <= 8))
+                if (hasWeakRoot(mLower))
                     return { level: 1, label: '弱 · 含常见弱口令', bits: 18 };
 
                 var cps = Array.from(m);
