@@ -881,12 +881,28 @@
             'use strict';
 
             var WEAK_ROOTS = {
-                '123456':1,'12345678':1,'123456789':1,'1234567890':1,'111111':1,'000000':1,
-                '666666':1,'888888':1,'5201314':1,'password':1,'passwd':1,'qwerty':1,
-                'qwertyuiop':1,'asdfgh':1,'asdfghjkl':1,'zxcvbn':1,'zxcvbnm':1,'abc123':1,
-                'iloveyou':1,'admin':1,'administrator':1,'root':1,'letmein':1,'welcome':1,
-                'monkey':1,'dragon':1,'master':1,'starrypass':1,'huami':1,'flowerpassword':1,
-                '1q2w3e4r':1,'qazwsx':1
+                '123':1,'1234':1,'12345':1,'123456':1,'1234567':1,'12345678':1,
+                '123456789':1,'1234567890':1,'12345678910':1,'0123456789':1,
+                '1111':1,'111111':1,'1111111':1,'000000':1,'666666':1,'888888':1,
+                '7777777':1,'555555':1,'654321':1,'123123':1,'123321':1,'112233':1,
+                '121212':1,'102030':1,'987654321':1,'5201314':1,'1314520':1,'7758521':1,
+                'password':1,'passwd':1,'passw0rd':1,'p@ssw0rd':1,'p@ssword':1,
+                'password1':1,'password123':1,'pass@123':1,'pass123':1,'pass1234':1,
+                'admin':1,'administrator':1,'admin123':1,'admin@123':1,'admintelecom':1,
+                'root':1,'login':1,'welcome':1,'welcome@123':1,'letmein':1,'secret':1,
+                'trustno1':1,'master':1,'access':1,'guest':1,'user':1,'test':1,'test1':1,
+                'changeme':1,'default':1,'pass':1,
+                'qwerty':1,'qwerty1':1,'qwerty123':1,'qwertyuiop':1,'asdfgh':1,'asdfghjkl':1,
+                'zxcvbn':1,'zxcvbnm':1,'1q2w3e':1,'1q2w3e4r':1,'1q2w3e4r5t':1,
+                '1qaz2wsx':1,'qazwsx':1,'qazwsxedc':1,'123qwe':1,'qwe123':1,
+                'azerty':1,'zaq1zaq1':1,
+                'abc123':1,'abcd1234':1,'abcd@1234':1,'aa123456':1,'aa@123456':1,
+                'a123456':1,'abc@123':1,'iloveyou':1,'loveme':1,'lovely':1,
+                'monkey':1,'dragon':1,'football':1,'baseball':1,'princess':1,
+                'sunshine':1,'shadow':1,'superman':1,'batman':1,'starwars':1,
+                'hello':1,'flower':1,'charlie':1,'minecraft':1,'google':1,
+                'woaini':1,'qq123456':1,'a123456789':1,
+                'starrypass':1,'huami':1,'flowerpassword':1
             };
             var KB_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 
@@ -912,7 +928,8 @@
                 var deLeet = mLower.replace(/[@4]/g, 'a').replace(/0/g, 'o').replace(/[1!|]/g, 'i')
                     .replace(/3/g, 'e').replace(/[$5]/g, 's').replace(/7/g, 't');
                 var stem = deLeet.replace(/[0-9!@#$%^&*()_+\-=[\]{};:"\\|,.<>/?~`]+$/g, '');
-                if (WEAK_ROOTS[mLower] || (WEAK_ROOTS[stem] && m.length - stem.length <= 6))
+                if (WEAK_ROOTS[mLower] || WEAK_ROOTS[deLeet] ||
+                    (WEAK_ROOTS[stem] && m.length - stem.length <= 8))
                     return { level: 1, label: '弱 · 含常见弱口令', bits: 18 };
 
                 var cps = Array.from(m);
