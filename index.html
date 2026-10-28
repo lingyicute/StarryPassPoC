@@ -1012,16 +1012,15 @@
             var counterInput = document.getElementById('counter-input');
 
             var state = { length: 16, mode: 'full', counter: 1, tier: 'standard' };
-            var lastPwd = null, lastLevel = -1, deriveId = 0, debounceTimer = null;
-            var worker = null, localEngine = null, inflight = false;
+            var deriveId = 0, debounceTimer = null;
+            var worker = null, localEngine = null, currentPayload = null;
+            var pendingPayload = null, busy = false, watchdogTimer = null, workerAllowed = true;
 
-            try {
-                worker = new Worker('./assets/js/spv2-worker.js');
-            } catch (e) {
-                worker = null;
-            }
-            if (!worker && typeof spv2CoreFactory === 'function') {
-                localEngine = spv2CoreFactory(null, false);
+            function ensureLocalEngine() {
+                if (!localEngine && typeof spv2CoreFactory === 'function') {
+                    localEngine = spv2CoreFactory(null, false);
+                }
+                return localEngine;
             }
 
             var ICONS = {
@@ -1093,12 +1092,12 @@
                 setChipGroup(this, 'data-tier', state.tier);
                 scheduleRefresh();
             });
+            function readCounter() {
+                return Math.max(1, Math.min(9999, parseInt(counterInput.value, 10) || 1));
+            }
             function clampCounter() {
-                var n = parseInt(counterInput.value, 10);
-                if (!n || n < 1) n = 1;
-                if (n > 9999) n = 9999;
-                counterInput.value = String(n);
-                state.counter = n;
+                state.counter = readCounter();
+                counterInput.value = String(state.counter);
             }
             document.getElementById('ctr-dec').addEventListener('click', function () {
                 counterInput.value = String(Math.max(1, (parseInt(counterInput.value, 10) || 1) - 1));
@@ -1108,6 +1107,7 @@
                 counterInput.value = String(Math.min(9999, (parseInt(counterInput.value, 10) || 1) + 1));
                 clampCounter(); scheduleRefresh();
             });
+            counterInput.addEventListener('input', function () { state.counter = readCounter(); scheduleRefresh(); });
             counterInput.addEventListener('change', function () { clampCounter(); scheduleRefresh(); });
 
             function setStrength(est) {
@@ -1134,77 +1134,174 @@
             }
 
             function showEmpty(placeholder) {
-                lastPwd = null;
                 output.textContent = placeholder;
                 output.classList.add('password--empty');
                 copyBtn.disabled = true;
+                clearTimeout(copyResetTimer);
+                copyBtn.classList.remove('is-copied');
+                copyLabel.textContent = '复制密码';
+                copyBtn.querySelector('svg path').setAttribute('d', ICONS.copy);
                 setStrength({ level: 0, label: '—' });
-                lastLevel = -1;
                 setBusy(false);
             }
 
-            function applyPassword(pwd, master, code) {
-                lastPwd = pwd;
+            function errorText(err) {
+                var code = err && err.message ? err.message : 'DERIVE_ERROR';
+                if (code === 'EMPTY_INPUT') return '请填写完整的主密码和代号';
+                if (code === 'MEMORY_LIMIT') return '内存不足，请改用「标准」档';
+                return '派生失败，请重试';
+            }
+
+            function applyPassword(pwd, payload) {
                 output.textContent = pwd;
                 output.classList.remove('password--empty');
                 copyBtn.disabled = false;
-                var est = estimateCrackResistance(master, code, state.tier, state.mode, pwd.length);
-                setStrength(est);
-                lastLevel = est.level;
-                setBusy(false);
+                pwdLength.textContent = pwd.length + ' 位';
+                // 用"产生这条口令的输入"和"实际输出长度"来评级，避免状态漂移
+                setStrength(estimateCrackResistance(payload.master, payload.code, payload.tier, payload.mode, pwd.length));
             }
 
-            function derive(master, code, id) {
-                var payload = {
-                    id: id, type: 'derive', master: master, code: code,
-                    tier: state.tier, counter: state.counter, length: effectiveLength(),
-                    mode: state.mode
-                };
-                if (state.mode === 'pin') pwdLength.textContent = payload.length + ' 位';
-                else pwdLength.textContent = state.length + ' 位';
+            function clearWatchdog() {
+                clearTimeout(watchdogTimer);
+                watchdogTimer = null;
+            }
 
+            function isCurrent(payload) {
+                return payload && payload.id === deriveId
+                    && payload.master === masterInput.value && payload.code === codeInput.value
+                    && payload.tier === state.tier && payload.mode === state.mode
+                    && payload.counter === state.counter && payload.length === effectiveLength();
+            }
+
+            function stopWorker() {
+                var target = worker;
+                worker = null;
+                currentPayload = null;
+                busy = false;
+                clearWatchdog();
+                if (target) {
+                    target.onmessage = target.onerror = target.onmessageerror = null;
+                    try { target.terminate(); } catch (err) {}
+                }
+            }
+
+            /* 单槽合并队列：忙时只保留最新请求；过期回包不得改变当前任务的状态。 */
+            function dispatch(payload) {
+                if (!isCurrent(payload)) return;
+                startWorker();
+                busy = true;
+                currentPayload = payload;
+                setBusy(true);
                 if (worker) {
-                    inflight = true;
-                    setBusy(true);
-                    worker.postMessage(payload);
+                    var target = worker;
+                    try {
+                        target.postMessage(payload);
+                    } catch (err) {
+                        fallbackToLocal();
+                        return;
+                    }
+                    clearWatchdog();
+                    watchdogTimer = setTimeout(function () {
+                        if (worker !== target || currentPayload !== payload) return;
+                        var next = pendingPayload;
+                        pendingPayload = null;
+                        stopWorker();  // 先终止卡住的计算，不能把新任务继续排到同一个 Worker 后面。
+                        if (isCurrent(next)) dispatch(next);
+                        else if (isCurrent(payload)) showEmpty('派生超时，请重试');
+                        else setBusy(!!debounceTimer);
+                    }, 60000);
                     return;
                 }
                 try {
-                    var res = localEngine.deriveSync(payload);
-                    if (id === deriveId) applyPassword(res.password, master, code);
+                    var engine = ensureLocalEngine();
+                    if (!engine) throw new Error('ENGINE_UNAVAILABLE');
+                    var res = engine.deriveSync(payload);
+                    if (isCurrent(payload)) applyPassword(res.password, payload);
                 } catch (err) {
-                    if (id === deriveId) showEmpty('派生失败，请重试');
+                    if (isCurrent(payload)) showEmpty(errorText(err));
                 }
+                finishOne();
             }
 
-            if (worker) {
-                worker.onmessage = function (ev) {
-                    inflight = false;
+            function finishOne() {
+                busy = false;
+                currentPayload = null;
+                clearWatchdog();
+                var next = pendingPayload;
+                pendingPayload = null;
+                if (isCurrent(next)) { dispatch(next); return; }
+                setBusy(!!debounceTimer);
+            }
+
+            function requestDerive(payload) {
+                if (busy) { pendingPayload = payload; setBusy(true); return; }
+                dispatch(payload);
+            }
+
+            function fallbackToLocal() {
+                stopWorker();
+                workerAllowed = false;
+                pendingPayload = null;
+                showSnackbar('兼容模式已启用（派生稍慢）');
+                refresh();
+            }
+
+            function startWorker() {
+                if (worker || !workerAllowed) return;
+                var target;
+                try {
+                    target = new Worker('./assets/js/spv2-worker.js');
+                } catch (err) {
+                    workerAllowed = false;
+                    showSnackbar('兼容模式已启用（派生稍慢）');
+                    return;
+                }
+                worker = target;
+                target.onmessage = function (ev) {
+                    if (worker !== target) return;
                     var data = ev.data || {};
-                    if (data.id !== deriveId) return;
-                    if (data.ok) applyPassword(data.password, masterInput.value, codeInput.value);
-                    else showEmpty(data.error === 'EMPTY_INPUT' ? '请填写完整的主密码和代号' : '派生失败，请重试');
+                    if (data.type === 'wiped') return;
+                    var payload = currentPayload;
+                    if (!payload || data.id !== payload.id) return;
+                    if (isCurrent(payload)) {
+                        if (data.ok) applyPassword(data.password, payload);
+                        else showEmpty(errorText({ message: data.error }));
+                    }
+                    finishOne();
+                };
+                target.onerror = target.onmessageerror = function (ev) {
+                    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+                    if (worker === target) fallbackToLocal();
                 };
             }
+            startWorker();
 
-            function refresh() {
+            function invalidateResult() {
+                clearTimeout(debounceTimer);
+                debounceTimer = null;
+                deriveId += 1;  // 输入/策略变化时立即作废，不能等 280 ms 防抖结束。
+                pendingPayload = null;
                 var master = masterInput.value, code = codeInput.value;
                 var hasInput = master !== '' && code.trim() !== '';
                 clearCodeBtn.hidden = code === '';
                 clearCodeBtn.disabled = code === '';
                 resetBtn.disabled = !master && !code;
-                if (!hasInput) {
-                    showEmpty(master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号');
-                    copyBtn.disabled = true;
-                    return;
-                }
-                deriveId += 1;
-                derive(master, code, deriveId);
+                pwdLength.textContent = effectiveLength() + ' 位';
+                showEmpty(hasInput ? '生成中…' : (master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号'));
+                setBusy(hasInput);
+                return hasInput;
+            }
+
+            function refresh() {
+                if (!invalidateResult()) return;
+                requestDerive({
+                    id: deriveId, type: 'derive', master: masterInput.value, code: codeInput.value,
+                    tier: state.tier, counter: state.counter, length: effectiveLength(), mode: state.mode
+                });
             }
 
             function scheduleRefresh() {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(refresh, 280);
+                if (invalidateResult()) debounceTimer = setTimeout(refresh, 280);
             }
             masterInput.addEventListener('input', scheduleRefresh);
             codeInput.addEventListener('input', scheduleRefresh);
@@ -1223,6 +1320,7 @@
                 return Promise.resolve(fallbackCopy(text));
             }
             function fallbackCopy(text) {
+                var active = document.activeElement;
                 var ta = document.createElement('textarea');
                 ta.value = text; ta.setAttribute('readonly', '');
                 ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
@@ -1230,17 +1328,20 @@
                 var ok = false;
                 try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
                 ta.remove();
+                if (active && typeof active.focus === 'function') active.focus({ preventScroll: true });
                 return ok;
             }
             var copyResetTimer = null;
             copyBtn.addEventListener('click', function () {
                 if (copyBtn.disabled) return;
-                copyText(output.textContent).then(function (ok) {
+                var text = output.textContent, copiedId = deriveId;
+                copyText(text).then(function (ok) {
                     if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
+                    showSnackbar('密码已复制到剪贴板');
+                    if (copiedId !== deriveId || copyBtn.disabled) return;
                     copyBtn.classList.add('is-copied');
                     copyLabel.textContent = '已复制';
                     copyBtn.querySelector('svg path').setAttribute('d', ICONS.check);
-                    showSnackbar('密码已复制到剪贴板');
                     clearTimeout(copyResetTimer);
                     copyResetTimer = setTimeout(function () {
                         copyBtn.classList.remove('is-copied');
@@ -1251,8 +1352,11 @@
             });
 
             function wipe() {
-                if (worker) worker.postMessage({ type: 'wipe', id: 0 });
-                else if (localEngine) localEngine.wipeSession();
+                deriveId += 1;
+                clearTimeout(debounceTimer); debounceTimer = null;
+                pendingPayload = null;
+                stopWorker();
+                if (localEngine) localEngine.wipeSession();
             }
             resetBtn.addEventListener('click', function () {
                 masterInput.value = ''; codeInput.value = '';
@@ -1262,6 +1366,7 @@
                 codeInput.value = ''; refresh(); codeInput.focus();
             });
             window.addEventListener('pagehide', wipe);
+            window.addEventListener('pageshow', function (event) { if (event.persisted) refresh(); });
 
             document.querySelectorAll('.ripple').forEach(function (btn) {
                 btn.addEventListener('pointerdown', function (e) {
