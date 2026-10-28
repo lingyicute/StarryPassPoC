@@ -28,7 +28,20 @@ const caches = {
     async keys() { return [...stores.keys()]; },
     async delete(name) { return stores.delete(name); }
 };
-const context = vm.createContext({ URL, Request, Response, Promise, caches,
+// 可控截止时间：无需真实等待 3 秒，也可测试完全不理会 abort 的 fetch。
+const timers = new Map();
+let timerId = 0;
+const expireNetwork = () => {
+    assert.ok(timers.size > 0, 'network deadline is armed');
+    for (const [id, fn] of [...timers]) { timers.delete(id); fn(); }
+};
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+const context = vm.createContext({ URL, Request, Response, Promise, caches, AbortController,
+    setTimeout(fn, ms) {
+        assert.equal(ms, 3000, 'bounded network wait');
+        const id = ++timerId; timers.set(id, fn); return id;
+    },
+    clearTimeout(id) { timers.delete(id); },
     self: { location: { href: base + 'service-worker.js' },
         addEventListener(type, fn) { handlers[type] = fn; },
         skipWaiting: async () => {}, clients: { claim: async () => {} } },
@@ -134,5 +147,69 @@ async function checkText(e, expected) {
     fetchImpl = async () => new Response('ONLINE WITHOUT CACHE');
     const quota = event('fetch', req());
     await checkText(quota, 'ONLINE WITHOUT CACHE'); await finish(quota);
-    console.log(`PASS service worker: ${checks} scope, update, offline and lifetime checks`);
+    putError = null;
+    check(() => assert.equal(timers.size, 0, 'completed transfers clear deadlines'));
+
+    // 连响应头都不返回，且忽略 abort：respondWith 与 waitUntil 仍必须及时结束。
+    let signal, resolveLate;
+    fetchImpl = (_, options) => {
+        signal = options.signal;
+        return new Promise((resolve) => { resolveLate = resolve; });
+    };
+    const stalled = event('fetch', req());
+    await tick();
+    expireNetwork();
+    await checkText(stalled, 'NEW SHELL'); await finish(stalled);
+    check(() => assert.equal(signal.aborted, true, 'timeout aborts the underlying request'));
+    check(() => assert.equal(timers.size, 0));
+    resolveLate(new Response('LATE SHELL MUST NOT REPLACE CACHE'));
+    await tick();
+    fetchImpl = offline;
+    const stillLatest = event('fetch', req());
+    await checkText(stillLatest, 'NEW SHELL'); await finish(stillLatest);
+
+    // 响应头已到，但正文挂起：导航和核心脚本均必须回退已有缓存。
+    for (const [url, mode, expected] of [
+        ['index.html', 'navigate', 'NEW SHELL'],
+        ['assets/js/spv2-core.js', 'cors', 'NEW CORE']
+    ]) {
+        let bodySignal;
+        fetchImpl = (_, options) => {
+            bodySignal = options.signal;
+            return Promise.resolve(new Response(new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('PARTIAL'));
+                    bodySignal.addEventListener('abort', () => controller.error(new Error('aborted')));
+                }
+            })));
+        };
+        const partial = event('fetch', req(url, mode));
+        await tick();
+        expireNetwork();
+        await checkText(partial, expected); await finish(partial);
+        check(() => assert.equal(bodySignal.aborted, true));
+    }
+
+    // 无缓存时返回网络错误，不能留下永不 settle 的响应或后台写入。
+    fetchImpl = () => new Promise(() => {});
+    const noCache = event('fetch', req('missing.js', 'cors'));
+    await tick(); expireNetwork();
+    const noCacheResponse = await noCache.response;
+    check(() => assert.equal(noCacheResponse.type, 'error'));
+    await finish(noCache);
+
+    // 快速网络照常胜出；预读正文不能破坏响应 URL/类型/状态/头部及缓存副本。
+    fetchImpl = async () => new Response('FAST CORE', { headers: { 'X-Review': 'preserved' } });
+    const fast = event('fetch', req('assets/js/spv2-core.js', 'cors'));
+    const fastResponse = await fast.response;
+    check(() => assert.equal(fastResponse.headers.get('X-Review'), 'preserved'));
+    const fastText = await fastResponse.text();
+    check(() => assert.equal(fastText, 'FAST CORE'));
+    await finish(fast);
+    check(() => assert.equal(timers.size, 0));
+    fetchImpl = offline;
+    const offlineFast = event('fetch', req('assets/js/spv2-core.js', 'cors'));
+    await checkText(offlineFast, 'FAST CORE'); await finish(offlineFast);
+    check(() => assert.equal(timers.size, 0));
+    console.log(`PASS service worker: ${checks} scope, update, offline, deadline and lifetime checks`);
 })().catch((err) => { console.error(err); process.exitCode = 1; });
