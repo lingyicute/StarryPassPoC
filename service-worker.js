@@ -1,4 +1,4 @@
-const TIMESTAMP = "1793181601";
+const TIMESTAMP = "1793181602";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 // CacheStorage 按 origin 共享；只管理本应用路径的命名空间，不能删除其他应用的缓存。
@@ -15,6 +15,7 @@ const PRECACHE_URLS = [
     "./assets/js/spv2-core.js",
     "./assets/js/spv2-worker.js"
 ];
+const NETWORK_TIMEOUT_MS = 3000;
 const STATIC_URLS = new Set(PRECACHE_URLS.map((url) => new URL(url, APP_ROOT).href));
 
 self.addEventListener("install", (event) => {
@@ -71,12 +72,40 @@ function putInRuntimeCache(request, response, navigation) {
     return caches.open(RUNTIME).then((cache) => cache.put(key, copy));
 }
 
+// 截止时间覆盖响应头及应用资源的完整正文，避免半开连接阻塞缓存兜底。
+async function fetchWithTimeout(request, navigation) {
+    const controller = new AbortController();
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            reject(new Error("NETWORK_TIMEOUT"));
+            controller.abort();
+        }, NETWORK_TIMEOUT_MS);
+    });
+    try {
+        const transfer = Promise.resolve().then(async () => {
+            const response = await fetch(request, { cache: "no-cache", signal: controller.signal });
+            if (response.status === 200 && response.type !== "opaque"
+                    && (navigation || STATIC_URLS.has(request.url))) {
+                // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
+                // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
+                await response.clone().arrayBuffer();
+            }
+            return response;
+        });
+        // 即使底层实现未响应 abort，截止时间也必须结束 respondWith / waitUntil。
+        return await Promise.race([transfer, timeout]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 self.addEventListener("fetch", (event) => {
     const request = event.request;
     if (request.method !== "GET" || !isAppRequest(request)) return;
     const navigation = request.mode === "navigate";
     // HTML 与脚本都重新验证，不能只更新 HTML 却继续执行旧的加密核心。
-    const network = fetch(request, { cache: "no-cache" });
+    const network = fetchWithTimeout(request, navigation);
     // 在 fetch 事件中同步登记，并返回真正的写入 Promise，而不是 undefined。
     event.waitUntil(network.then((response) => putInRuntimeCache(request, response, navigation)).catch(() => {}));
     event.respondWith(
