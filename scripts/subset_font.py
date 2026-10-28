@@ -8,12 +8,6 @@ import urllib.request
 
 # 子集化用的完整字体来源
 FONT_URL = "https://raw.githubusercontent.com/lingyicute/Nebulove/main/Nebulove.ttf"
-# 远程回退：保留 StarryPass 原有 CDN，另加 jsDelivr TTF 兜底
-# 注意：@font-face 的多 src 是“加载失败”回退，不是按字形回退；
-# 缺字形会走到 font-family 栈的系统字体。
-FALLBACK_WOFF2 = "https://nebulove.92li.uk/Nebulove.woff2"
-FALLBACK_TTF = "https://cdn.jsdelivr.net/gh/lingyicute/Nebulove@main/Nebulove.ttf"
-
 # 仓库根目录的 index.html（无论从哪里运行脚本都能定位）
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_PATH = os.path.join(REPO_ROOT, "index.html")
@@ -37,7 +31,7 @@ def main():
     # 补全 ASCII 可打印字符（32-126）：覆盖英文输入、代码、标点
     for c in range(32, 127):
         chars.add(chr(c))
-    # 常用中文标点（与 92li 一致）
+    # 常用中文标点
     chars.update(['：', '，', '。', '！', '？', '；', '“', '”', '‘', '’', '（', '）', '【', '】', '—', '…', '·', '《', '》', '×', '＝', '÷', '＋', '－'])
 
     print(f"Total unique characters needed: {len(chars)}")
@@ -71,12 +65,12 @@ def main():
         b64_font = base64.b64encode(f.read()).decode("utf-8")
 
     # 5. 替换 index.html 中的 @font-face（保留原有缩进风格）
+    # 只保留内嵌 data URI：远程回退一旦被 CSP 拦截只会产生控制台噪音，
+    # 且会在"完全离线、零第三方请求"的承诺上留下缺口。
     font_css_template = (
         '@font-face{\n'
         '    font-family:"Nebulove";\n'
-        f'    src:url("data:font/woff2;charset=utf-8;base64,{b64_font}") format("woff2"),\n'
-        f'        url("{FALLBACK_WOFF2}") format("woff2"),\n'
-        f'        url("{FALLBACK_TTF}") format("truetype");\n'
+        f'    src:url("data:font/woff2;charset=utf-8;base64,{b64_font}") format("woff2");\n'
         '    font-display:swap;\n'
         '}'
     )

@@ -495,63 +495,77 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     u8: new Uint8Array(wasmState.mem.buffer),
                     i32: new Int32Array(wasmState.mem.buffer),
                     compress: wasmState.fn,
-                    isWasm: true,
-                    usedBytes: requiredBytes
+                    isWasm: true
                 };
             } catch (err) {
-                if (requiredBytes > 100 * 1048576 && wasmState && wasmState.pages < Math.ceil(requiredBytes / 65536)) {
-                    throw new Error('MEMORY_LIMIT');
+                if (wasmState && wasmState.pages < Math.ceil(requiredBytes / 65536)
+                        && requiredBytes >= 100 * 1048576) throw new Error('MEMORY_LIMIT');
+                if (typeof console === 'object' && typeof console.warn === 'function') {
+                    console.warn('[spv2] WASM 不可用，本次回退纯 JS：' + (err && err.message ? err.message : err));
                 }
             }
         }
-        var buf = new ArrayBuffer(requiredBytes);
+        var buf;
+        try {
+            buf = new ArrayBuffer(requiredBytes);
+        } catch (err) {
+            if (err instanceof RangeError) throw new Error('MEMORY_LIMIT');
+            throw err;
+        }
         var i32 = new Int32Array(buf);
         return {
             u8: new Uint8Array(buf),
             i32: i32,
             compress: function (offX, offY, offOut, xorFlag) { jsCompress(i32, offX, offY, offOut, xorFlag); },
-            isWasm: false,
-            usedBytes: requiredBytes
+            isWasm: false
         };
     }
 
     function initArgon2Ctx(params) {
         var P = params.password, S = params.salt;
         var K = params.secret || new Uint8Array(0), X = params.ad || new Uint8Array(0);
-        var m = params.memoryKiB, t = params.passes, p = params.parallelism, T = params.tagLength || 32;
+        var m = params.memoryKiB, t = params.passes, p = params.parallelism;
+        var T = params.tagLength === undefined ? 32 : params.tagLength;
         var yType = 2, version = 0x13;
+        var headerFixed = new Uint8Array(24), fields, h0Input, H0, seedBuf, blkBytes, arena;
+        try {
+            writeLE32(headerFixed, 0, p); writeLE32(headerFixed, 4, T); writeLE32(headerFixed, 8, m);
+            writeLE32(headerFixed, 12, t); writeLE32(headerFixed, 16, version); writeLE32(headerFixed, 20, yType);
+            fields = [headerFixed, lenPrefixed(P), lenPrefixed(S), lenPrefixed(K), lenPrefixed(X)];
+            h0Input = concatBytes(fields);
+            H0 = blake2b(h0Input, 64);
+            zeroize(h0Input);
 
-        var headerFixed = new Uint8Array(24);
-        writeLE32(headerFixed, 0, p); writeLE32(headerFixed, 4, T); writeLE32(headerFixed, 8, m);
-        writeLE32(headerFixed, 12, t); writeLE32(headerFixed, 16, version); writeLE32(headerFixed, 20, yType);
-        var h0Input = concatBytes([headerFixed, lenPrefixed(P), lenPrefixed(S), lenPrefixed(K), lenPrefixed(X)]);
-        var H0 = blake2b(h0Input, 64);
-        zeroize(h0Input);
+            var totalBlocks = 4 * p * Math.floor(m / (4 * p));
+            var laneLen = totalBlocks / p, sliceLen = laneLen / 4;
+            var baseScratch = totalBlocks * 1024;
+            arena = getArena(baseScratch + 6144);
+            var memU8 = arena.u8;
+            memU8.fill(0, baseScratch, baseScratch + 6144);
 
-        var totalBlocks = 4 * p * Math.floor(m / (4 * p));
-        var laneLen = totalBlocks / p, sliceLen = laneLen / 4;
-        var baseScratch = totalBlocks * 1024;
-        var arena = getArena(baseScratch + 6144);
-        var memU8 = arena.u8;
-        memU8.fill(0, baseScratch, baseScratch + 6144);
-
-        var seedBuf = new Uint8Array(72);
-        seedBuf.set(H0, 0);
-        for (var lane = 0; lane < p; lane++) {
-            for (var jb = 0; jb < 2; jb++) {
-                writeLE32(seedBuf, 64, jb); writeLE32(seedBuf, 68, lane);
-                var blkBytes = argon2HashPrime(seedBuf, 1024);
-                memU8.set(blkBytes, (lane * laneLen + jb) * 1024);
-                zeroize(blkBytes);
+            seedBuf = new Uint8Array(72);
+            seedBuf.set(H0, 0);
+            for (var lane = 0; lane < p; lane++) {
+                for (var jb = 0; jb < 2; jb++) {
+                    writeLE32(seedBuf, 64, jb); writeLE32(seedBuf, 68, lane);
+                    blkBytes = argon2HashPrime(seedBuf, 1024);
+                    memU8.set(blkBytes, (lane * laneLen + jb) * 1024);
+                    zeroize(blkBytes);
+                }
             }
+            return {
+                t: t, p: p, T: T, yType: yType,
+                totalBlocks: totalBlocks, laneLen: laneLen, sliceLen: sliceLen,
+                baseScratch: baseScratch, arena: arena
+            };
+        } catch (err) {
+            if (arena) zeroize(arena.u8);
+            throw err;
+        } finally {
+            if (fields) for (var f = 0; f < fields.length; f++) zeroize(fields[f]);
+            zeroize(headerFixed); zeroize(h0Input); zeroize(H0);
+            zeroize(seedBuf); zeroize(blkBytes);
         }
-        zeroize(seedBuf); zeroize(H0);
-
-        return {
-            t: t, p: p, T: T, yType: yType,
-            totalBlocks: totalBlocks, laneLen: laneLen, sliceLen: sliceLen,
-            baseScratch: baseScratch, arena: arena
-        };
     }
 
     function runArgon2Slice(ctx, pass, slice) {
@@ -611,25 +625,53 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     function finalizeArgon2Ctx(ctx) {
         var finalBytes = new Uint8Array(1024);
         var memU8 = ctx.arena.u8;
-        for (var fl = 0; fl < ctx.p; fl++) {
-            var lastByteOff = (fl * ctx.laneLen + ctx.laneLen - 1) * 1024;
-            for (var fb = 0; fb < 1024; fb++) finalBytes[fb] ^= memU8[lastByteOff + fb];
+        try {
+            for (var fl = 0; fl < ctx.p; fl++) {
+                var lastByteOff = (fl * ctx.laneLen + ctx.laneLen - 1) * 1024;
+                for (var fb = 0; fb < 1024; fb++) finalBytes[fb] ^= memU8[lastByteOff + fb];
+            }
+            return argon2HashPrime(finalBytes, ctx.T);
+        } finally {
+            zeroize(finalBytes);
         }
-        var tag = argon2HashPrime(finalBytes, ctx.T);
-        zeroize(finalBytes);
-        memU8.fill(0, 0, ctx.usedBytes || (ctx.baseScratch + 6144));
-        zeroize(JS_R); zeroize(JS_Z);
-        return tag;
+    }
+
+    function validateArgon2Params(params) {
+        if (!params) throw new Error('ARGON2_INVALID_INPUT');
+        var fields = ['password', 'salt', 'secret', 'ad'];
+        for (var i = 0; i < fields.length; i++) {
+            var value = params[fields[i]];
+            if (i >= 2 && value == null) continue;
+            if (!(value instanceof Uint8Array)) throw new Error('ARGON2_INVALID_INPUT');
+            if (value.length > 0xffffffff) throw new Error('ARGON2_INPUT_TOO_LONG');
+        }
+        var m = params.memoryKiB, t = params.passes, p = params.parallelism;
+        var T = params.tagLength === undefined ? 32 : params.tagLength;
+        if (params.salt.length < 8) throw new Error('ARGON2_SALT_TOO_SHORT');
+        if (!Number.isInteger(p) || p < 1 || p > 0xffffff
+                || !Number.isInteger(t) || t < 1 || t > 0xffffffff
+                || !Number.isInteger(m) || m < 0 || m > 0xffffffff) throw new Error('ARGON2_INVALID_COST');
+        if (m < 8 * p) throw new Error('ARGON2_MEMORY_TOO_LOW');
+        if (!Number.isInteger(T) || T > 0xffffffff) throw new Error('ARGON2_INVALID_TAG_LENGTH');
+        if (T < 4) throw new Error('ARGON2_TAG_TOO_SHORT');
     }
 
     function argon2idSync(params) {
-        var ctx = initArgon2Ctx(params);
-        for (var pass = 0; pass < ctx.t; pass++) {
-            for (var slice = 0; slice < 4; slice++) {
-                runArgon2Slice(ctx, pass, slice);
+        validateArgon2Params(params);
+        var ctx;
+        try {
+            ctx = initArgon2Ctx(params);
+            for (var pass = 0; pass < ctx.t; pass++) {
+                for (var slice = 0; slice < 4; slice++) {
+                    runArgon2Slice(ctx, pass, slice);
+                }
             }
+            return finalizeArgon2Ctx(ctx);
+        } finally {
+            // 覆盖整个 arena（包括增长后的尾部），异常路径也必须执行；不代表归还内存。
+            if (ctx) zeroize(ctx.arena.u8);
+            zeroize(JS_R); zeroize(JS_Z);
         }
-        return finalizeArgon2Ctx(ctx);
     }
 
     /* ---------- Stage 2 & Stage 3: HKDF-SHA-256 + Zero-Bias Rejection Synthesis ---------- */
@@ -744,13 +786,22 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     /* ---------- Ephemeral Single-Slot Session Key Cache (Zeroized on Wipe/Change) ---------- */
     var sessionNonce = null;
+    var sessionNonceUnavailable = false;
     function getSessionNonce() {
+        if (sessionNonceUnavailable) return null;
         if (!sessionNonce) {
-            sessionNonce = new Uint8Array(32);
-            if (typeof crypto === 'object' && crypto.getRandomValues) {
-                crypto.getRandomValues(sessionNonce);
-            } else {
-                for (var i = 0; i < 32; i++) sessionNonce[i] = (Math.random() * 256) | 0;
+            var nonce = new Uint8Array(32);
+            try {
+                if (typeof crypto !== 'object' || typeof crypto.getRandomValues !== 'function') {
+                    throw new Error('NO_CSPRNG');
+                }
+                crypto.getRandomValues(nonce);
+                sessionNonce = nonce;
+            } catch (err) {
+                // 缺失或失败时均关闭缓存，不留下可预测的全零 nonce。
+                zeroize(nonce);
+                sessionNonceUnavailable = true;
+                return null;
             }
         }
         return sessionNonce;
@@ -769,11 +820,16 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function computeSessionTag(masterBytes, codeBytes, tierId) {
+        var nonce = getSessionNonce();
+        if (!nonce) return null;
         var tierByte = new Uint8Array([tierId]);
-        var msg = concatBytes([DOMAIN_CACHE, lenPrefixed(masterBytes), lenPrefixed(codeBytes), tierByte]);
-        var mac = hmacSha256(getSessionNonce(), msg);
-        zeroize(msg);
-        return mac;
+        var masterField = lenPrefixed(masterBytes), codeField = lenPrefixed(codeBytes), msg;
+        try {
+            msg = concatBytes([DOMAIN_CACHE, masterField, codeField, tierByte]);
+            return hmacSha256(nonce, msg);
+        } finally {
+            zeroize(masterField); zeroize(codeField); zeroize(msg);
+        }
     }
 
     function buildSalt(codeBytes, tierId) {
@@ -785,14 +841,19 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function canonicalizeInputs(req) {
+        if (!req || typeof req !== 'object') throw new Error('INVALID_REQUEST');
+        // 保留省略参数时的原有默认值，但显式未知值不能静默降级。
+        var tier = req.tier === undefined ? 'standard' : req.tier;
+        var mode = req.mode === undefined ? 'full' : req.mode;
+        if (typeof tier !== 'string' || !Object.prototype.hasOwnProperty.call(TIERS, tier)) throw new Error('INVALID_TIER');
+        if (typeof mode !== 'string' || !Object.prototype.hasOwnProperty.call(MODES, mode)) throw new Error('INVALID_MODE');
         var masterNorm = String(req.master || '').normalize('NFC');
         var codeNorm   = String(req.code || '').trim().normalize('NFC');
         var masterBytes = encoder.encode(masterNorm);
         var codeBytes   = encoder.encode(codeNorm);
-        var tierSpec = TIERS[req.tier] || TIERS.standard;
+        var tierSpec = TIERS[tier];
         var counter = Math.max(1, Math.min(9999, parseInt(req.counter, 10) || 1));
         var length  = Math.max(4, Math.min(64, parseInt(req.length, 10) || 16));
-        var mode    = MODES[req.mode] ? req.mode : 'full';
         return {
             masterBytes: masterBytes,
             codeBytes: codeBytes,
@@ -806,35 +867,41 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     function deriveSync(req) {
         runSelfTest();
         var inp = canonicalizeInputs(req);
-        if (!inp.masterBytes.length || !inp.codeBytes.length) {
+        var reqTag = null, salt = null, sk = null, usedCache = false;
+        try {
+            if (!inp.masterBytes.length || !inp.codeBytes.length) throw new Error('EMPTY_INPUT');
+            reqTag = computeSessionTag(inp.masterBytes, inp.codeBytes, inp.tierSpec.id);
+            if (reqTag && cachedTag && cachedSk && constantTimeEqual(reqTag, cachedTag)) {
+                usedCache = true;
+                sk = cachedSk;
+            } else {
+                zeroize(cachedTag); cachedTag = null;
+                zeroize(cachedSk); cachedSk = null;
+                salt = buildSalt(inp.codeBytes, inp.tierSpec.id);
+                sk = argon2idSync({
+                    password: inp.masterBytes,
+                    salt: salt,
+                    ad: DOMAIN_AD,
+                    memoryKiB: inp.tierSpec.memoryKiB,
+                    passes: inp.tierSpec.passes,
+                    parallelism: inp.tierSpec.parallelism,
+                    tagLength: 32
+                });
+                if (reqTag) {
+                    cachedTag = reqTag; reqTag = null;
+                    cachedSk = sk;
+                }
+            }
+            return {
+                password: synthesizePassword(sk, inp.codeBytes, inp.counter, inp.length, inp.mode),
+                cached: usedCache
+            };
+        } finally {
             zeroize(inp.masterBytes); zeroize(inp.codeBytes);
-            throw new Error('EMPTY_INPUT');
+            zeroize(reqTag); zeroize(salt);
+            // 没有安全 nonce 时，派生密钥只用一次，不保留不可复用的“缓存”。
+            if (sk !== cachedSk) zeroize(sk);
         }
-        var reqTag = computeSessionTag(inp.masterBytes, inp.codeBytes, inp.tierSpec.id);
-        var usedCache = false;
-        if (cachedTag && cachedSk && constantTimeEqual(reqTag, cachedTag)) {
-            usedCache = true;
-            zeroize(reqTag);
-        } else {
-            if (cachedTag) zeroize(cachedTag);
-            if (cachedSk) zeroize(cachedSk);
-            var salt = buildSalt(inp.codeBytes, inp.tierSpec.id);
-            cachedSk = argon2idSync({
-                password: inp.masterBytes,
-                salt: salt,
-                ad: DOMAIN_AD,
-                memoryKiB: inp.tierSpec.memoryKiB,
-                passes: inp.tierSpec.passes,
-                parallelism: inp.tierSpec.parallelism,
-                tagLength: 32
-            });
-            zeroize(salt);
-            cachedTag = reqTag;
-        }
-        zeroize(inp.masterBytes);
-        var pwd = synthesizePassword(cachedSk, inp.codeBytes, inp.counter, inp.length, inp.mode);
-        zeroize(inp.codeBytes);
-        return { password: pwd, cached: usedCache };
     }
 
     if (workerGlobal && typeof workerGlobal.postMessage === 'function') {

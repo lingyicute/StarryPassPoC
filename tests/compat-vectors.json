@@ -1,0 +1,148 @@
+{
+  "baseline": "eabdda1c5808682a112b0d29878e56464b7f4123",
+  "vectors": [
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        16,
+        "full"
+      ],
+      "pwd": "WueNKY^SRHRh4!DL"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        20,
+        "full"
+      ],
+      "pwd": "vT_Hx%h9j@SwbpMQj&1D"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        24,
+        "full"
+      ],
+      "pwd": "uFS?F&@dGi&F$=VI8ENV5ANq"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        16,
+        "alnum"
+      ],
+      "pwd": "DYcoPv9E2unIUceA"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        20,
+        "alnum"
+      ],
+      "pwd": "3MvqfyOXKh34zNvTUf2i"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        24,
+        "alnum"
+      ],
+      "pwd": "5uyNjiMFK2H9HySjoQfwhiwo"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        6,
+        "pin"
+      ],
+      "pwd": "845961"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        1,
+        8,
+        "pin"
+      ],
+      "pwd": "66026381"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "github",
+        "standard",
+        9999,
+        24,
+        "full"
+      ],
+      "pwd": "^9GsDAb=j&W?V2#tQpRFa7hf"
+    },
+    {
+      "args": [
+        "correct horse battery staple",
+        "GitHub",
+        "standard",
+        1,
+        16,
+        "full"
+      ],
+      "pwd": "eOD&&$g1Ua?kZA^r"
+    },
+    {
+      "args": [
+        "  café-secret 🔐  ",
+        "  Café站点  ",
+        "standard",
+        2,
+        16,
+        "alnum"
+      ],
+      "pwd": "d8sDo5DB1aZaZaYt"
+    },
+    {
+      "args": [
+        "long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 long master phrase 🔐 ",
+        "long-master-site",
+        "standard",
+        1,
+        16,
+        "full"
+      ],
+      "pwd": "^oyeN^z-^VqncuA3"
+    },
+    {
+      "args": [
+        "  preserve leading and trailing spaces  ",
+        "space-site",
+        "standard",
+        1,
+        16,
+        "full"
+      ],
+      "pwd": ")#*UQxm$CC59vGR9"
+    }
+  ]
+}
