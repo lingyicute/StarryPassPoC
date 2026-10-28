@@ -72,7 +72,23 @@ assert.deepEqual(estimate('20000101'), { level: 1, label: '弱 · 勿用纯日�
 const long = 'Cobalt lanterns drift beyond the violet horizon 82!';
 const standard = estimate(long);
 assert.equal(standard.level, 4);
-assert.equal(estimate(long, 'unique-site-code', 'paranoid').bits, standard.bits + 3);
+// 输出空间上界封顶（并非精确熵）：16 × log2(77) ≈ 100.27 → 100
+assert.equal(standard.bits, Math.round(16 * Math.log2(77)), 'output entropy caps the master estimate');
+// 输出空间必须约束评级（回归：PIN/短输出曾被标成"极强"）
+assert.equal(estimate('correct horse battery staple', 'unique-site-code', 'standard', 'full', 6).label,
+    '弱 · 建议加长主密码', '6-char full output must not be rated strong');
+assert.equal(estimate('correct horse battery staple', 'unique-site-code', 'standard', 'pin', 8).level, 2);
+assert.equal(estimate('correct horse battery staple', 'unique-site-code', 'standard', 'pin', 8).bits, Math.round(8 * Math.log2(10)));
+// 弱主密码分支也不能报告高于短 PIN 输出空间的比特数。
+for (const master of ['X9!', 'password', '20000101']) {
+    assert.ok(estimate(master, 'unique-site-code', 'standard', 'pin', 4).bits <= Math.round(4 * Math.log2(10)));
+}
+assert.equal(estimate(long, 'unique-site-code', 'standard', 'pin', 6).bits, Math.round(6 * Math.log2(10)));
+// 强度档加成只在"主密码是瓶颈"时体现；被封顶时不再额外加分
+const binding = 'tidal basin at dawn';
+assert.equal(estimate(binding, 'unique-site-code', 'paranoid').bits,
+    estimate(binding, 'unique-site-code', 'standard').bits + 3, 'tier bonus applies below the output cap');
+assert.equal(estimate(long, 'unique-site-code', 'paranoid').bits, standard.bits, 'tier bonus must not exceed the output cap');
 assert.equal(estimate(long, 'unique-site-code', 'standard', 'pin', 8).label, 'PIN · 依赖终端限次');
 assert.equal(estimate('X9!', 'unique-site-code', 'standard', 'pin', 8).label, '弱 · 主密码过短');
 assert.deepEqual(estimate('Cafe\u0301 long random phrase 82!'), estimate('Café long random phrase 82!'));
