@@ -1,4 +1,4 @@
-const TIMESTAMP = "1793181602";
+const TIMESTAMP = "1793198950";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 // CacheStorage 按 origin 共享；只管理本应用路径的命名空间，不能删除其他应用的缓存。
