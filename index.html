@@ -659,6 +659,7 @@
             background: var(--md-sys-color-surface-container-highest);
             color: var(--md-sys-color-on-surface-variant);
         }
+        .chip:disabled { opacity: .38; pointer-events: none; }
         .chip[aria-pressed="true"] {
             background: var(--md-sys-color-secondary-container);
             color: var(--md-sys-color-on-secondary-container);
@@ -940,13 +941,16 @@
                 var m = String(master || '').normalize('NFC');
                 var c = String(code || '').trim().normalize('NFC');
                 if (!m || !c) return { level: 0, label: '—', bits: 0 };
+                // 仅为输出空间的理论上界，不是精确熵；字符类别约束会进一步缩小空间。
+                var poolSize = mode === 'pin' ? 10 : (mode === 'alnum' ? 62 : 77);
+                var outBits = Math.max(0, Number(length) || 0) * Math.log2(poolSize);
                 var mLower = m.toLowerCase(), cLower = c.toLowerCase();
                 if (cLower.length >= 2 && mLower.indexOf(cLower) !== -1)
-                    return { level: 1, label: '弱 · 主密码勿含代号', bits: 16 };
+                    return { level: 1, label: '弱 · 主密码勿含代号', bits: Math.round(Math.min(16, outBits)) };
                 if (/^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(m))
-                    return { level: 1, label: '弱 · 勿用纯日期', bits: 15 };
+                    return { level: 1, label: '弱 · 勿用纯日期', bits: Math.round(Math.min(15, outBits)) };
                 if (hasWeakRoot(mLower))
-                    return { level: 1, label: '弱 · 含常见弱口令', bits: 18 };
+                    return { level: 1, label: '弱 · 含常见弱口令', bits: Math.round(Math.min(18, outBits)) };
 
                 var cps = Array.from(m);
                 var hasLower = false, hasUpper = false, hasDigit = false, hasSym = false, i, ch, cp;
@@ -976,10 +980,12 @@
                     seen[ch] = count + 1;
                 }
                 if (tier === 'paranoid') bits += 3;
-                if (mode === 'pin' && length <= 8) {
-                    if (bits < 44) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(bits) };
-                    return { level: 2, label: 'PIN · 依赖终端限次', bits: Math.round(bits) };
+                if (mode === 'pin') {
+                    if (bits < 44) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(Math.min(bits, outBits)) };
+                    // PIN 的安全性由终端限次决定，等级保持"中"，但比特数如实反映输出空间
+                    return { level: 2, label: 'PIN · 依赖终端限次', bits: Math.round(Math.min(bits, outBits)) };
                 }
+                bits = Math.min(bits, outBits);
                 if (bits < 44) return { level: 1, label: '弱 · 建议加长主密码', bits: Math.round(bits) };
                 if (bits < 64) return { level: 2, label: '中 · 建议用长句口令', bits: Math.round(bits) };
                 if (bits < 86) return { level: 3, label: '强 · 抗集群暴力破解', bits: Math.round(bits) };
@@ -1044,7 +1050,8 @@
             function initTheme() {
                 var saved = null;
                 try { saved = localStorage.getItem('sp-theme'); } catch (e) {}
-                applyTheme(saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                applyTheme(saved === 'dark' || saved === 'light' ? saved : (prefersDark ? 'dark' : 'light'));
             }
             themeToggle.addEventListener('click', function () {
                 var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -1068,20 +1075,16 @@
             }
             document.getElementById('len-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-len]'); if (!btn) return;
+                if (btn.disabled) return;
                 state.length = parseInt(btn.getAttribute('data-len'), 10);
-                setChipGroup(this, 'data-len', state.length);
-                pwdLength.textContent = state.length + ' 位';
+                syncLengthChips();
                 scheduleRefresh();
             });
             document.getElementById('mode-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-mode]'); if (!btn) return;
                 state.mode = btn.getAttribute('data-mode');
                 setChipGroup(this, 'data-mode', state.mode);
-                if (state.mode === 'pin' && state.length > 8) {
-                    state.length = 6;
-                    setChipGroup(document.getElementById('len-chips'), 'data-len', 16);
-                    pwdLength.textContent = '6 位';
-                }
+                syncLengthChips();
                 scheduleRefresh();
             });
             document.getElementById('tier-chips').addEventListener('click', function (e) {
@@ -1116,6 +1119,20 @@
                 deriveBar.classList.toggle('is-busy', on);
             }
 
+            /* PIN 保留原有的 6 位策略；不再覆盖非 PIN 模式所选的长度。 */
+            function effectiveLength() {
+                return state.mode === 'pin' ? 6 : state.length;
+            }
+            function syncLengthChips() {
+                var pin = state.mode === 'pin';
+                // 长度芯片仅适用于 full/alnum；PIN 下禁用且不高亮，避免显示相互矛盾。
+                document.querySelectorAll('#len-chips .chip').forEach(function (btn) {
+                    btn.disabled = pin;
+                    btn.setAttribute('aria-pressed', String(!pin && btn.getAttribute('data-len') === String(state.length)));
+                });
+                pwdLength.textContent = effectiveLength() + ' 位';
+            }
+
             function showEmpty(placeholder) {
                 lastPwd = null;
                 output.textContent = placeholder;
@@ -1131,7 +1148,7 @@
                 output.textContent = pwd;
                 output.classList.remove('password--empty');
                 copyBtn.disabled = false;
-                var est = estimateCrackResistance(master, code, state.tier, state.mode, state.length);
+                var est = estimateCrackResistance(master, code, state.tier, state.mode, pwd.length);
                 setStrength(est);
                 lastLevel = est.level;
                 setBusy(false);
@@ -1140,7 +1157,7 @@
             function derive(master, code, id) {
                 var payload = {
                     id: id, type: 'derive', master: master, code: code,
-                    tier: state.tier, counter: state.counter, length: state.mode === 'pin' ? Math.min(state.length, 8) : state.length,
+                    tier: state.tier, counter: state.counter, length: effectiveLength(),
                     mode: state.mode
                 };
                 if (state.mode === 'pin') pwdLength.textContent = payload.length + ' 位';
@@ -1261,6 +1278,7 @@
             });
 
             initTheme();
+            syncLengthChips();
             refresh();
 
             if ('serviceWorker' in navigator && location.protocol === 'https:') {
