@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
 
@@ -35,12 +35,15 @@ jobs:
           python scripts/subset_font.py
 
       - name: Commit and push changes as user
+        env:
+          COMMIT_NAME: ${{ github.actor }}
+          COMMIT_EMAIL: ${{ github.event.pusher.email || format('{0}@users.noreply.github.com', github.actor) }}
         run: |
           if git diff --quiet index.html; then
             echo "No changes in index.html detected."
           else
-            git config user.name "${{ github.actor }}"
-            git config user.email "${{ github.event.pusher.email || format('{0}@users.noreply.github.com', github.actor) }}"
+            git config user.name "$COMMIT_NAME"
+            git config user.email "$COMMIT_EMAIL"
             git add index.html
             git commit -m "perf: 更新 Nebulove 字体子集"
             git push
