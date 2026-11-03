@@ -129,6 +129,11 @@ async function checkText(e, expected) {
         await checkText(e, 'NEW SHELL');
         await finish(e);
     }
+    for (const url of ['', 'index.html']) {
+        const e = event('fetch', req(url, 'cors'));
+        await checkText(e, 'NEW SHELL');
+        await finish(e);
+    }
     fetchImpl = async () => new Response('NEW CORE');
     const core = event('fetch', req('assets/js/spv2-core.js', 'cors'));
     await checkText(core, 'NEW CORE'); await finish(core);
