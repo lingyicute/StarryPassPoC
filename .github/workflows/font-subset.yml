@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   subset-and-embed:
@@ -38,6 +39,7 @@ jobs:
         env:
           COMMIT_NAME: ${{ github.actor }}
           COMMIT_EMAIL: ${{ github.event.pusher.email || format('{0}@users.noreply.github.com', github.actor) }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if git diff --quiet index.html; then
             echo "No changes in index.html detected."
@@ -47,4 +49,8 @@ jobs:
             git add index.html
             git commit -m "perf: 更新 Nebulove 字体子集"
             git push
+            # GITHUB_TOKEN 的推送不会触发 Pages 工作流；手动派发一次，才能部署新字体子集。
+            if [ "$GITHUB_REF_NAME" = "main" ]; then
+              gh workflow run static.yml --ref main
+            fi
           fi
