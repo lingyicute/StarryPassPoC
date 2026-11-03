@@ -1286,11 +1286,14 @@
                     if (data.type === 'wiped') return;
                     var payload = currentPayload;
                     if (!payload || data.id !== payload.id) return;
-                    if (isCurrent(payload)) {
-                        if (data.ok) applyPassword(data.password, payload);
-                        else showEmpty(errorText({ message: data.error }));
+                    try {
+                        if (isCurrent(payload)) {
+                            if (data.ok === true) applyPassword(data.password, payload);
+                            else showEmpty(errorText({ message: data.error }));
+                        }
+                    } finally {
+                        finishOne();
                     }
-                    finishOne();
                 };
                 target.onerror = target.onmessageerror = function (ev) {
                     if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
