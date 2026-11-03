@@ -1357,7 +1357,7 @@
                 }
                 resetBtn.disabled = !master && !code;
                 pwdLength.textContent = effectiveLength() + ' 位';
-                showEmpty(hasInput ? '生成中…' : (master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号'));
+                showEmpty(hasInput ? (composing ? '输入中…' : '生成中…') : (master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号'));
                 setBusy(hasInput && !composing);
                 return hasInput;
             }
