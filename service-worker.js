@@ -1,4 +1,4 @@
-const TIMESTAMP = "1793198950";
+const TIMESTAMP = "1793676700";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 // CacheStorage 按 origin 共享；只管理本应用路径的命名空间，不能删除其他应用的缓存。
@@ -50,18 +50,25 @@ function isShellRequest(request) {
     return path === APP_ROOT.pathname || path === new URL(SHELL_URL).pathname;
 }
 
+async function matchCached(name, request) {
+    try {
+        // 只读取指定名称的缓存：不创建它，也不让一处存储故障掩盖另一缓存里可用的副本。
+        return await caches.match(request, { cacheName: name });
+    } catch (err) {
+        return undefined;
+    }
+}
+
 async function cachedResponse(request, navigation) {
-    const runtime = await caches.open(RUNTIME);
-    const precache = await caches.open(VERSION);
     // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
     if (navigation && isShellRequest(request)) {
-        return (await runtime.match(SHELL_URL)) || (await runtime.match(request))
-            || (await precache.match(request)) || (await precache.match(SHELL_URL));
+        return (await matchCached(RUNTIME, SHELL_URL)) || (await matchCached(RUNTIME, request))
+            || (await matchCached(VERSION, request)) || (await matchCached(VERSION, SHELL_URL));
     }
-    return (await runtime.match(request))
-        || (navigation && await runtime.match(SHELL_URL))
-        || (await precache.match(request))
-        || (navigation && await precache.match(SHELL_URL));
+    return (await matchCached(RUNTIME, request))
+        || (navigation && await matchCached(RUNTIME, SHELL_URL))
+        || (await matchCached(VERSION, request))
+        || (navigation && await matchCached(VERSION, SHELL_URL));
 }
 
 function putInRuntimeCache(request, response, navigation) {
