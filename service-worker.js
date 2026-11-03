@@ -1,4 +1,4 @@
-const TIMESTAMP = "1793676700";
+const TIMESTAMP = "1793680000";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 // CacheStorage 按 origin 共享；只管理本应用路径的命名空间，不能删除其他应用的缓存。
@@ -61,7 +61,7 @@ async function matchCached(name, request) {
 
 async function cachedResponse(request, navigation) {
     // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
-    if (navigation && isShellRequest(request)) {
+    if (isShellRequest(request) && (navigation || STATIC_URLS.has(request.url))) {
         return (await matchCached(RUNTIME, SHELL_URL)) || (await matchCached(RUNTIME, request))
             || (await matchCached(VERSION, request)) || (await matchCached(VERSION, SHELL_URL));
     }
@@ -73,7 +73,7 @@ async function cachedResponse(request, navigation) {
 
 function putInRuntimeCache(request, response, navigation) {
     if (response.status !== 200 || response.type === "opaque") return Promise.resolve();
-    const key = navigation && isShellRequest(request) ? SHELL_URL : request.url;
+    const key = isShellRequest(request) && (navigation || STATIC_URLS.has(request.url)) ? SHELL_URL : request.url;
     // 仅缓存明确列出的应用资源；不无限积累带查询参数的 URL 或意外缓存未来 API 的响应。
     if (!STATIC_URLS.has(key)) return Promise.resolve();
     const copy = response.clone();
