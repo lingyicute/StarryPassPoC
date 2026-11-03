@@ -141,11 +141,14 @@ async def test_queue(browser, url):
         check((await requests(page))[-1]['counter'] == 9998, 'decrement steps from clamped counter value')
         await reply(page, (await requests(page))[-1])
         before_req_count = len(await requests(page))
+        await page.fill('#code-input', 'pre-ime-debounce')
         await page.evaluate("""() => {
             const input = document.getElementById('code-input');
+            input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}));
             input.value = 'ime-raw';
             input.dispatchEvent(new InputEvent('input', {bubbles: true, isComposing: true}));
         }""")
+        await page.click('#ctr-inc')
         check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar'),
               'IME composition immediately invalidates previous output without stuck busy bar')
         await page.clock.run_for(300)
@@ -156,8 +159,15 @@ async def test_queue(browser, url):
             input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true}));
         }""")
         await page.clock.run_for(300)
-        check(len(await requests(page)) == before_req_count + 1 and (await requests(page))[-1]['code'] == 'ime-done',
-              'compositionend dispatches derivation for committed text')
+        check(len(await requests(page)) == before_req_count + 1 and (await requests(page))[-1]['code'] == 'ime-done'
+              and (await requests(page))[-1]['counter'] == 9999,
+              'compositionend dispatches derivation for committed text after mid-IME policy change')
+        await page.evaluate("""() => {
+            const ctr = document.getElementById('counter-input');
+            ctr.value = '09999';
+            ctr.dispatchEvent(new FocusEvent('blur'));
+        }""")
+        check(await page.input_value('#counter-input') == '9999', 'counter blur normalizes raw text even without change event')
         await reply(page, (await requests(page))[-1])
         await page.click('#visibility-btn')
         check(await page.get_attribute('#master-input', 'type') == 'text', 'visibility toggle reveals master input')
@@ -261,9 +271,10 @@ async def test_copy_and_theme(browser, url):
         await fill(page); await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
         await page.evaluate("""() => {
-            window.__copied = []; window.__reads = 0;
+            window.__copied = []; window.__reads = 0; window.__execCopies = 0;
+            document.execCommand = () => { __execCopies++; return true; };
             Object.defineProperty(navigator, 'clipboard', {configurable:true, value: {
-                writeText(text) { __copied.push(text); return new Promise(resolve => window.__resolveCopy = resolve); },
+                writeText(text) { __copied.push(text); return new Promise((resolve, reject) => { window.__resolveCopy = resolve; window.__rejectCopy = reject; }); },
                 readText() { __reads++; return Promise.resolve('other private text'); }
             }});
         }""")
@@ -276,6 +287,13 @@ async def test_copy_and_theme(browser, url):
         check(await page.evaluate('__copied[0]') == FAKE_PASSWORD, 'copy captures the clicked result')
         await page.clock.run_for(45001)
         check(await page.evaluate('__reads') == 0, 'no unsolicited clipboard read or unreliable auto-wipe')
+        await page.clock.run_for(300)
+        await reply(page, (await requests(page))[-1])
+        await page.click('#copy-btn')
+        await page.fill('#code-input', 'changed-before-copy-reject')
+        await page.evaluate("__rejectCopy(new Error('denied after input change'))")
+        check(await page.evaluate('__execCopies') == 0, 'stale async clipboard rejection never falls back to execCommand copy')
+        await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
         await page.evaluate("""() => {
             navigator.clipboard.writeText = () => Promise.reject(new Error('denied'));
