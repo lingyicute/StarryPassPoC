@@ -18,6 +18,17 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/img/icons/apple.png">
     <link rel="icon" href="./assets/img/icons/192.png" sizes="192x192" type="image/png" />
     <link rel="icon" href="./assets/img/icons/512.png" sizes="512x512" type="image/png" />
+    <script>
+        /* 首帧前应用主题，避免深色用户先看到浅色页面再闪成深色；与下方 initTheme 规则一致。 */
+        (function () {
+            var theme = null;
+            try { theme = localStorage.getItem('sp-theme'); } catch (e) {}
+            if (theme !== 'dark' && theme !== 'light') {
+                theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <style>
         /* ============================================================
            Material You (Material 3) design tokens — light theme
@@ -1054,6 +1065,15 @@
                 try { saved = localStorage.getItem('sp-theme'); } catch (e) {}
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 applyTheme(saved === 'dark' || saved === 'light' ? saved : (prefersDark ? 'dark' : 'light'));
+                // 未手动选择主题时跟随系统配色变化；手动选择后以保存值为准。
+                var media = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+                if (media && typeof media.addEventListener === 'function') {
+                    media.addEventListener('change', function (ev) {
+                        var stored = null;
+                        try { stored = localStorage.getItem('sp-theme'); } catch (e) {}
+                        if (stored !== 'dark' && stored !== 'light') applyTheme(ev.matches ? 'dark' : 'light');
+                    });
+                }
             }
             themeToggle.addEventListener('click', function () {
                 var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
