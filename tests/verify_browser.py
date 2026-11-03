@@ -127,6 +127,43 @@ async def test_queue(browser, url):
         counter = (await requests(page))[-1]
         check(counter['counter'] == 2, 'counter input is used without requiring change/blur')
         await reply(page, counter)
+        await page.dispatch_event('#counter-input', 'change')
+        check(await page.is_enabled('#copy-btn') and await page.inner_text('#password-output') == FAKE_PASSWORD,
+              'counter blur/change without value change preserves derived password')
+        await page.fill('#counter-input', '100000')
+        await page.clock.run_for(300)
+        await reply(page, (await requests(page))[-1])
+        await page.click('#ctr-dec')
+        await page.clock.run_for(300)
+        check((await requests(page))[-1]['counter'] == 9998, 'decrement steps from clamped counter value')
+        await reply(page, (await requests(page))[-1])
+        before_req_count = len(await requests(page))
+        await page.evaluate("""() => {
+            const input = document.getElementById('code-input');
+            input.value = 'ime-raw';
+            input.dispatchEvent(new InputEvent('input', {bubbles: true, isComposing: true}));
+        }""")
+        check(not await page.is_enabled('#copy-btn'), 'IME composition immediately invalidates previous output')
+        await page.clock.run_for(300)
+        check(len(await requests(page)) == before_req_count, 'IME composition does not trigger KDF before compositionend')
+        await page.evaluate("""() => {
+            const input = document.getElementById('code-input');
+            input.value = 'ime-done';
+            input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true}));
+        }""")
+        await page.clock.run_for(300)
+        check(len(await requests(page)) == before_req_count + 1 and (await requests(page))[-1]['code'] == 'ime-done',
+              'compositionend dispatches derivation for committed text')
+        await reply(page, (await requests(page))[-1])
+        await page.click('#visibility-btn')
+        check(await page.get_attribute('#master-input', 'type') == 'text', 'visibility toggle reveals master input')
+        await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pagehide'))")
+        check(await page.get_attribute('#master-input', 'type') == 'password' and not await page.is_enabled('#copy-btn')
+              and await page.inner_text('#password-output') == '请输入主密码和代号',
+              'pagehide masks master input and clears displayed password from DOM')
+        await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+        await page.clock.run_for(300)
+        await reply(page, (await requests(page))[-1])
         await page.fill('#master-input', '')
         check(not await page.is_enabled('#copy-btn'), 'manual clear invalidates immediately')
         await page.clock.run_for(300)
@@ -339,6 +376,7 @@ async def test_theme_first_paint_and_system_follow(browser, url):
         await page.goto(url)
         first = await page.evaluate('__themeWrites[0]')
         check(first == {'value': 'dark', 'bodyReady': False}, 'dark OS theme is applied before the body is parsed')
+        check(await page.evaluate("document.getElementById('theme-color-meta').content") == '#111318', 'dark theme-color meta synced before first paint')
         check(await page.get_attribute('html', 'data-theme') == 'dark', 'dark OS theme stays after init')
         await page.emulate_media(color_scheme='light')
         await poll(lambda: page.evaluate("document.documentElement.dataset.theme === 'light'"))
