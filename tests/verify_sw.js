@@ -184,8 +184,12 @@ async function checkText(e, expected) {
     await checkText(stalled, 'NEW SHELL'); await finish(stalled);
     check(() => assert.equal(signal.aborted, true, 'timeout aborts the underlying request'));
     check(() => assert.equal(timers.size, 0));
-    resolveLate(new Response('LATE SHELL MUST NOT REPLACE CACHE'));
+    let lateBodyRead = false;
+    const lateResp = new Response('LATE SHELL MUST NOT REPLACE CACHE');
+    lateResp.clone = () => ({ arrayBuffer: async () => { lateBodyRead = true; return new ArrayBuffer(0); } });
+    resolveLate(lateResp);
     await tick();
+    check(() => assert.equal(lateBodyRead, false, 'late response after timeout does not buffer body'));
     fetchImpl = offline;
     const stillLatest = event('fetch', req());
     await checkText(stillLatest, 'NEW SHELL'); await finish(stillLatest);
@@ -255,6 +259,11 @@ async function checkText(e, expected) {
     openError = names.VERSION; matchError = names.VERSION;
     const failedPrecacheRead = event('fetch', req());
     await checkText(failedPrecacheRead, 'RUNTIME STILL USABLE'); await finish(failedPrecacheRead);
+
+    // If SHELL_URL is missing in RUNTIME/VERSION, APP_ROOT entry still serves shell requests.
+    stores.set(names.RUNTIME, new Map([[base, new Response('RUNTIME ROOT SHELL')]]));
+    const rootShellFallback = event('fetch', req('index.html?from-root=1'));
+    await checkText(rootShellFallback, 'RUNTIME ROOT SHELL'); await finish(rootShellFallback);
 
     // Never cross into a different application's cache if both ours fail.
     stores.get('other-app').set(names.SHELL_URL, new Response('FOREIGN CACHE MUST NOT LEAK'));

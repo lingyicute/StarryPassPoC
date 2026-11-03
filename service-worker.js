@@ -1,4 +1,4 @@
-const TIMESTAMP = "1793680000";
+const TIMESTAMP = "1793680001";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 // CacheStorage 按 origin 共享；只管理本应用路径的命名空间，不能删除其他应用的缓存。
@@ -63,12 +63,15 @@ async function cachedResponse(request, navigation) {
     // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
     if (isShellRequest(request) && (navigation || STATIC_URLS.has(request.url))) {
         return (await matchCached(RUNTIME, SHELL_URL)) || (await matchCached(RUNTIME, request))
-            || (await matchCached(VERSION, request)) || (await matchCached(VERSION, SHELL_URL));
+            || (await matchCached(RUNTIME, APP_ROOT.href)) || (await matchCached(VERSION, request))
+            || (await matchCached(VERSION, SHELL_URL)) || (await matchCached(VERSION, APP_ROOT.href));
     }
     return (await matchCached(RUNTIME, request))
         || (navigation && await matchCached(RUNTIME, SHELL_URL))
+        || (navigation && await matchCached(RUNTIME, APP_ROOT.href))
         || (await matchCached(VERSION, request))
-        || (navigation && await matchCached(VERSION, SHELL_URL));
+        || (navigation && await matchCached(VERSION, SHELL_URL))
+        || (navigation && await matchCached(VERSION, APP_ROOT.href));
 }
 
 function putInRuntimeCache(request, response, navigation) {
@@ -93,11 +96,13 @@ async function fetchWithTimeout(request, navigation) {
     try {
         const transfer = Promise.resolve().then(async () => {
             const response = await fetch(request, { cache: "no-cache", signal: controller.signal });
+            if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
             if (response.status === 200 && response.type !== "opaque"
                     && (navigation || STATIC_URLS.has(request.url))) {
                 // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
                 // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
                 await response.clone().arrayBuffer();
+                if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
             }
             return response;
         });
