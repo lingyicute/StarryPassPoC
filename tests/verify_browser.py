@@ -389,6 +389,39 @@ async def test_service_worker(browser, url, site, state):
     print('PASS browser: HTTPS service-worker update, query aliases, offline derivation and HTTP 503')
 
 
+async def test_service_worker_read_failure(browser, url):
+    # 只替换真实 SW 的运行时缓存操作；已安装的预缓存与网络保持原样，
+    # 浏览器自身的 CacheStorage 仍提供预缓存。
+    context = await browser.new_context(ignore_https_errors=True)
+    page = await context.new_page()
+    try:
+        await page.goto(url); await poll(lambda: page.evaluate('!!navigator.serviceWorker.controller'))
+        await page.wait_for_load_state('networkidle')
+        service_worker = context.service_workers[-1]
+        await service_worker.evaluate("""() => {
+            const nativeMatch=caches.match.bind(caches), nativeOpen=caches.open.bind(caches);
+            self.__runtimeReadFaults=0;self.__runtimeOpenFaults=0;
+            caches.match=(request,options)=>{
+                if(options && options.cacheName===RUNTIME){self.__runtimeReadFaults++;throw new Error('INJECTED_runtime_read');}
+                return nativeMatch(request,options);
+            };
+            caches.open=name=>{
+                if(name===RUNTIME){self.__runtimeOpenFaults++;throw new Error('INJECTED_runtime_open');}
+                return nativeOpen(name);
+            };
+        }""")
+        await context.set_offline(True)
+        await page.goto(url + '?runtime-fault=1')
+        check(await page.evaluate('typeof spv2CoreFactory') == 'function', 'real precache loads core when runtime storage fails')
+        await fill(page); await ready(page)
+        check(await page.inner_text('#password-output') == BASE_PASSWORD, 'runtime read failure preserves real offline derivation')
+        check(await service_worker.evaluate('__runtimeReadFaults') > 0, 'browser fault injection actually exercised runtime reads')
+        check(await service_worker.evaluate('__runtimeOpenFaults') == 0, 'browser fallback never needs to create/open runtime cache')
+    finally:
+        await context.close()
+    print('PASS browser: real CacheStorage precache fallback during runtime read failure')
+
+
 async def main():
     with tempfile.TemporaryDirectory(prefix='starrypass-browser-') as temporary:
         site = Path(temporary)
@@ -433,6 +466,7 @@ async def main():
                     await test_malformed_results(browser, url)
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
+                    await test_service_worker_read_failure(browser, url)
                 finally:
                     await browser.close()
         finally:
