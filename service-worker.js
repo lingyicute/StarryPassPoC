@@ -96,15 +96,22 @@ async function fetchWithTimeout(request, navigation) {
     try {
         const transfer = Promise.resolve().then(async () => {
             const response = await fetch(request, { cache: "no-cache", signal: controller.signal });
-            if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
-            if (response.status === 200 && response.type !== "opaque"
-                    && (navigation || STATIC_URLS.has(request.url))) {
-                // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
-                // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
-                await response.clone().arrayBuffer();
+            try {
                 if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
+                if (response.status === 200 && response.type !== "opaque"
+                        && (navigation || STATIC_URLS.has(request.url))) {
+                    // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
+                    // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
+                    await response.clone().arrayBuffer();
+                    if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
+                }
+                return response;
+            } catch (err) {
+                if (response && response.body && typeof response.body.cancel === "function") {
+                    response.body.cancel().catch(() => {});
+                }
+                throw err;
             }
-            return response;
         });
         // 即使底层实现未响应 abort，截止时间也必须结束 respondWith / waitUntil。
         return await Promise.race([transfer, timeout]);
@@ -123,7 +130,15 @@ self.addEventListener("fetch", (event) => {
     event.waitUntil(network.then((response) => putInRuntimeCache(request, response, navigation)).catch(() => {}));
     event.respondWith(
         network.then(async (response) => {
-            if (response.status >= 500) return (await cachedResponse(request, navigation)) || response;
+            if (response.status >= 500) {
+                const cached = await cachedResponse(request, navigation);
+                if (cached) {
+                    if (response.body && typeof response.body.cancel === "function") {
+                        response.body.cancel().catch(() => {});
+                    }
+                    return cached;
+                }
+            }
             return response;
         }).catch(async () => (await cachedResponse(request, navigation)) || Response.error())
     );
