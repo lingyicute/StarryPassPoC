@@ -676,112 +676,121 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     /* ---------- Stage 2 & Stage 3: HKDF-SHA-256 + Zero-Bias Rejection Synthesis ---------- */
     function synthesizePassword(sk, codeBytes, counter, length, modeName) {
-        var modeSpec = MODES[modeName] || MODES.full;
-        var prk = hmacSha256(DOMAIN_EXTRACT, sk);
-
-        var meta = new Uint8Array(7);
+        var modeSpec = Object.prototype.hasOwnProperty.call(MODES, modeName) ? MODES[modeName] : MODES.full;
+        var meta = new Uint8Array(7), prk, codeField, info, prev, streamBuf;
         writeLE32(meta, 0, counter >>> 0);
         writeLE16(meta, 4, length & 0xffff);
         meta[6] = modeSpec.id;
-        var info = concatBytes([DOMAIN_EXPAND, meta, lenPrefixed(codeBytes)]);
+        try {
+            prk = hmacSha256(DOMAIN_EXTRACT, sk);
+            codeField = lenPrefixed(codeBytes);
+            info = concatBytes([DOMAIN_EXPAND, meta, codeField]);
 
-        var blockIdx = 0;
-        var prev = new Uint8Array(0);
-        var streamBuf = new Uint8Array(32);
-        var streamPos = 32;
+            var blockIdx = 0;
+            prev = new Uint8Array(0);
+            streamBuf = new Uint8Array(32);
+            var streamPos = 32;
 
-        function nextByte() {
-            if (streamPos >= streamBuf.length) {
-                blockIdx++;
-                if (blockIdx > 255) throw new Error('HKDF_EXHAUSTED');
-                var inBlk = new Uint8Array(prev.length + info.length + 1);
-                inBlk.set(prev, 0);
-                inBlk.set(info, prev.length);
-                inBlk[prev.length + info.length] = blockIdx;
-                var next = hmacSha256(prk, inBlk);
-                zeroize(inBlk);
-                zeroize(prev);
-                prev = next;
-                streamBuf.set(prev);
-                streamPos = 0;
-            }
-            return streamBuf[streamPos++];
-        }
-
-        function uniformInt(n) {
-            var limit = 256 - (256 % n);
-            for (;;) {
-                var b = nextByte();
-                if (b < limit) return b % n;
-            }
-        }
-
-        var pool = modeSpec.pool;
-        var reqClasses = length >= modeSpec.req.length ? modeSpec.req : [];
-        var result = null;
-
-        for (var attempt = 0; attempt < 128; attempt++) {
-            var chars = new Array(length);
-            for (var i = 0; i < length; i++) chars[i] = pool.charAt(uniformInt(pool.length));
-            var candidate = chars.join('');
-            var ok = true;
-            for (var c = 0; c < reqClasses.length; c++) {
-                var cls = reqClasses[c], found = false;
-                for (var k = 0; k < candidate.length; k++) {
-                    if (cls.indexOf(candidate.charAt(k)) !== -1) { found = true; break; }
+            function nextByte() {
+                if (streamPos >= streamBuf.length) {
+                    blockIdx++;
+                    if (blockIdx > 255) throw new Error('HKDF_EXHAUSTED');
+                    var inBlk = new Uint8Array(prev.length + info.length + 1);
+                    inBlk.set(prev, 0);
+                    inBlk.set(info, prev.length);
+                    inBlk[prev.length + info.length] = blockIdx;
+                    var next = hmacSha256(prk, inBlk);
+                    zeroize(inBlk);
+                    zeroize(prev);
+                    prev = next;
+                    streamBuf.set(prev);
+                    streamPos = 0;
                 }
-                if (!found) { ok = false; break; }
+                return streamBuf[streamPos++];
             }
-            if (ok) { result = candidate; break; }
-        }
 
-        if (!result) {
-            var arr = [];
-            for (var r = 0; r < reqClasses.length; r++) {
-                arr.push(reqClasses[r].charAt(uniformInt(reqClasses[r].length)));
+            function uniformInt(n) {
+                var limit = 256 - (256 % n);
+                for (;;) {
+                    var b = nextByte();
+                    if (b < limit) return b % n;
+                }
             }
-            while (arr.length < length) arr.push(pool.charAt(uniformInt(pool.length)));
-            for (var s = length - 1; s > 0; s--) {
-                var j = uniformInt(s + 1);
-                var tmp = arr[s]; arr[s] = arr[j]; arr[j] = tmp;
-            }
-            result = arr.join('');
-        }
 
-        zeroize(prk);
-        zeroize(info);
-        zeroize(prev);
-        zeroize(streamBuf);
-        return result;
+            var pool = modeSpec.pool;
+            var reqClasses = length >= modeSpec.req.length ? modeSpec.req : [];
+            var result = null;
+
+            for (var attempt = 0; attempt < 128; attempt++) {
+                var chars = new Array(length);
+                for (var i = 0; i < length; i++) chars[i] = pool.charAt(uniformInt(pool.length));
+                var candidate = chars.join('');
+                var ok = true;
+                for (var c = 0; c < reqClasses.length; c++) {
+                    var cls = reqClasses[c], found = false;
+                    for (var k = 0; k < candidate.length; k++) {
+                        if (cls.indexOf(candidate.charAt(k)) !== -1) { found = true; break; }
+                    }
+                    if (!found) { ok = false; break; }
+                }
+                if (ok) { result = candidate; break; }
+            }
+
+            if (!result) {
+                var arr = [];
+                for (var r = 0; r < reqClasses.length; r++) {
+                    arr.push(reqClasses[r].charAt(uniformInt(reqClasses[r].length)));
+                }
+                while (arr.length < length) arr.push(pool.charAt(uniformInt(pool.length)));
+                for (var s = length - 1; s > 0; s--) {
+                    var j = uniformInt(s + 1);
+                    var tmp = arr[s]; arr[s] = arr[j]; arr[j] = tmp;
+                }
+                result = arr.join('');
+            }
+
+            return result;
+        } finally {
+            zeroize(prk);
+            zeroize(info);
+            zeroize(codeField);
+            zeroize(meta);
+            zeroize(prev);
+            zeroize(streamBuf);
+        }
     }
 
     /* ---------- FIPS 140-3 Style Power-On Self-Test (KAT) ---------- */
     var selfTestPassed = false;
     function runSelfTest() {
         if (selfTestPassed) return;
-        // 1. RFC 9106 §5.3 Argon2id KAT
         var p = new Uint8Array(32).fill(1), s = new Uint8Array(16).fill(2);
         var k = new Uint8Array(8).fill(3), x = new Uint8Array(12).fill(4);
-        var tag = argon2idSync({ password: p, salt: s, secret: k, ad: x, memoryKiB: 32, passes: 3, parallelism: 4, tagLength: 32 });
-        var expectedA2 = [
-            0x0d,0x64,0x0d,0xf5,0x8d,0x78,0x76,0x6c,0x08,0xc0,0x37,0xa3,0x4a,0x8b,0x53,0xc9,
-            0xd0,0x1e,0xf0,0x45,0x2d,0x75,0xb6,0x5e,0xb5,0x25,0x20,0xe9,0x6b,0x01,0xe6,0x59
-        ];
-        for (var i = 0; i < 32; i++) {
-            if (tag[i] !== expectedA2[i]) throw new Error('KAT_ARGON2ID_FAILED');
-        }
-        zeroize(tag);
+        var tag, tcSalt, tcIkm, prk;
+        try {
+            // 1. RFC 9106 §5.3 Argon2id KAT
+            tag = argon2idSync({ password: p, salt: s, secret: k, ad: x, memoryKiB: 32, passes: 3, parallelism: 4, tagLength: 32 });
+            var expectedA2 = [
+                0x0d,0x64,0x0d,0xf5,0x8d,0x78,0x76,0x6c,0x08,0xc0,0x37,0xa3,0x4a,0x8b,0x53,0xc9,
+                0xd0,0x1e,0xf0,0x45,0x2d,0x75,0xb6,0x5e,0xb5,0x25,0x20,0xe9,0x6b,0x01,0xe6,0x59
+            ];
+            for (var i = 0; i < 32; i++) {
+                if (tag[i] !== expectedA2[i]) throw new Error('KAT_ARGON2ID_FAILED');
+            }
 
-        // 2. RFC 5869 TC1 HMAC/SHA-256 KAT (first 8 bytes of PRK = 077709362c2e32df)
-        var tcSalt = new Uint8Array([0,1,2,3,4,5,6,7,8,9,10,11,12]);
-        var tcIkm = new Uint8Array(22).fill(0x0b);
-        var prk = hmacSha256(tcSalt, tcIkm);
-        var expectedPrk8 = [0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf];
-        for (var j = 0; j < 8; j++) {
-            if (prk[j] !== expectedPrk8[j]) throw new Error('KAT_SHA256_FAILED');
+            // 2. RFC 5869 TC1 HMAC/SHA-256 KAT (first 8 bytes of PRK = 077709362c2e32df)
+            tcSalt = new Uint8Array([0,1,2,3,4,5,6,7,8,9,10,11,12]);
+            tcIkm = new Uint8Array(22).fill(0x0b);
+            prk = hmacSha256(tcSalt, tcIkm);
+            var expectedPrk8 = [0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf];
+            for (var j = 0; j < 8; j++) {
+                if (prk[j] !== expectedPrk8[j]) throw new Error('KAT_SHA256_FAILED');
+            }
+            selfTestPassed = true;
+        } finally {
+            zeroize(p); zeroize(s); zeroize(k); zeroize(x);
+            zeroize(tag); zeroize(tcSalt); zeroize(tcIkm); zeroize(prk);
         }
-        zeroize(prk);
-        selfTestPassed = true;
     }
 
     /* ---------- Ephemeral Single-Slot Session Key Cache (Zeroized on Wipe/Change) ---------- */
@@ -822,22 +831,28 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     function computeSessionTag(masterBytes, codeBytes, tierId) {
         var nonce = getSessionNonce();
         if (!nonce) return null;
-        var tierByte = new Uint8Array([tierId]);
-        var masterField = lenPrefixed(masterBytes), codeField = lenPrefixed(codeBytes), msg;
+        var tierByte, masterField, codeField, msg;
         try {
+            tierByte = new Uint8Array([tierId]);
+            masterField = lenPrefixed(masterBytes);
+            codeField = lenPrefixed(codeBytes);
             msg = concatBytes([DOMAIN_CACHE, masterField, codeField, tierByte]);
             return hmacSha256(nonce, msg);
         } finally {
-            zeroize(masterField); zeroize(codeField); zeroize(msg);
+            zeroize(masterField); zeroize(codeField); zeroize(msg); zeroize(tierByte);
         }
     }
 
     function buildSalt(codeBytes, tierId) {
-        var tierByte = new Uint8Array([tierId]);
-        var saltIn = concatBytes([DOMAIN_SALT, lenPrefixed(codeBytes), tierByte]);
-        var s = sha256(saltIn);
-        zeroize(saltIn);
-        return s;
+        var tierByte, codeField, saltIn;
+        try {
+            tierByte = new Uint8Array([tierId]);
+            codeField = lenPrefixed(codeBytes);
+            saltIn = concatBytes([DOMAIN_SALT, codeField, tierByte]);
+            return sha256(saltIn);
+        } finally {
+            zeroize(saltIn); zeroize(codeField); zeroize(tierByte);
+        }
     }
 
     function canonicalizeInputs(req) {
@@ -849,26 +864,33 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         if (typeof mode !== 'string' || !Object.prototype.hasOwnProperty.call(MODES, mode)) throw new Error('INVALID_MODE');
         var masterNorm = String(req.master || '').normalize('NFC');
         var codeNorm   = String(req.code || '').trim().normalize('NFC');
-        var masterBytes = encoder.encode(masterNorm);
-        var codeBytes   = encoder.encode(codeNorm);
         var tierSpec = TIERS[tier];
         var counter = Math.max(1, Math.min(9999, parseInt(req.counter, 10) || 1));
         var length  = Math.max(4, Math.min(64, parseInt(req.length, 10) || 16));
-        return {
-            masterBytes: masterBytes,
-            codeBytes: codeBytes,
-            tierSpec: tierSpec,
-            counter: counter,
-            length: length,
-            mode: mode
-        };
+        var masterBytes, codeBytes;
+        try {
+            masterBytes = encoder.encode(masterNorm);
+            codeBytes   = encoder.encode(codeNorm);
+            return {
+                masterBytes: masterBytes,
+                codeBytes: codeBytes,
+                tierSpec: tierSpec,
+                counter: counter,
+                length: length,
+                mode: mode
+            };
+        } catch (err) {
+            zeroize(masterBytes);
+            zeroize(codeBytes);
+            throw err;
+        }
     }
 
     function deriveSync(req) {
-        runSelfTest();
-        var inp = canonicalizeInputs(req);
-        var reqTag = null, salt = null, sk = null, usedCache = false;
+        var inp = null, reqTag = null, salt = null, sk = null, usedCache = false, completed = false;
         try {
+            runSelfTest();
+            inp = canonicalizeInputs(req);
             if (!inp.masterBytes.length || !inp.codeBytes.length) throw new Error('EMPTY_INPUT');
             reqTag = computeSessionTag(inp.masterBytes, inp.codeBytes, inp.tierSpec.id);
             if (reqTag && cachedTag && cachedSk && constantTimeEqual(reqTag, cachedTag)) {
@@ -887,37 +909,42 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     parallelism: inp.tierSpec.parallelism,
                     tagLength: 32
                 });
-                if (reqTag) {
-                    cachedTag = reqTag; reqTag = null;
-                    cachedSk = sk;
-                }
             }
+            zeroize(inp.masterBytes);
+            var pwd = synthesizePassword(sk, inp.codeBytes, inp.counter, inp.length, inp.mode);
+            if (!usedCache && reqTag) {
+                cachedTag = reqTag; reqTag = null;
+                cachedSk = sk;
+            }
+            completed = true;
             return {
-                password: synthesizePassword(sk, inp.codeBytes, inp.counter, inp.length, inp.mode),
+                password: pwd,
                 cached: usedCache
             };
         } finally {
-            zeroize(inp.masterBytes); zeroize(inp.codeBytes);
+            if (inp) { zeroize(inp.masterBytes); zeroize(inp.codeBytes); }
             zeroize(reqTag); zeroize(salt);
             // 没有安全 nonce 时，派生密钥只用一次，不保留不可复用的“缓存”。
-            if (sk !== cachedSk) zeroize(sk);
+            if (sk && sk !== cachedSk) zeroize(sk);
+            if (!completed) wipeSession();
         }
     }
 
     if (workerGlobal && typeof workerGlobal.postMessage === 'function') {
         workerGlobal.onmessage = function (ev) {
             var data = ev.data || {};
+            var id = data.id;
             if (data.type === 'wipe') {
                 wipeSession();
-                workerGlobal.postMessage({ id: data.id, type: 'wiped' });
+                workerGlobal.postMessage({ id: id, type: 'wiped' });
                 return;
             }
             if (data.type === 'derive') {
                 try {
                     var res = deriveSync(data);
-                    workerGlobal.postMessage({ id: data.id, ok: true, password: res.password, cached: res.cached });
+                    workerGlobal.postMessage({ id: id, ok: true, password: res.password, cached: res.cached });
                 } catch (err) {
-                    workerGlobal.postMessage({ id: data.id, ok: false, error: err && err.message ? err.message : 'DERIVE_ERROR' });
+                    workerGlobal.postMessage({ id: id, ok: false, error: err && err.message ? err.message : 'DERIVE_ERROR' });
                 }
             }
         };
