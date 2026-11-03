@@ -795,9 +795,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     /* ---------- Ephemeral Single-Slot Session Key Cache (Zeroized on Wipe/Change) ---------- */
     var sessionNonce = null;
-    var sessionNonceUnavailable = false;
     function getSessionNonce() {
-        if (sessionNonceUnavailable) return null;
         if (!sessionNonce) {
             var nonce = new Uint8Array(32);
             try {
@@ -807,9 +805,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                 crypto.getRandomValues(nonce);
                 sessionNonce = nonce;
             } catch (err) {
-                // 缺失或失败时均关闭缓存，不留下可预测的全零 nonce。
+                // 缺失或失败时均关闭缓存，不留下可预测的全零 nonce；后续调用可重试恢复。
                 zeroize(nonce);
-                sessionNonceUnavailable = true;
                 return null;
             }
         }
@@ -823,6 +820,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         if (cachedTag) { zeroize(cachedTag); cachedTag = null; }
         if (cachedSk)  { zeroize(cachedSk);  cachedSk  = null; }
         if (sessionNonce) { zeroize(sessionNonce); sessionNonce = null; }
+        zeroize(JS_R); zeroize(JS_Z);
         if (wasmState && wasmState.mem) {
             new Uint8Array(wasmState.mem.buffer).fill(0);
         }
@@ -932,7 +930,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     if (workerGlobal && typeof workerGlobal.postMessage === 'function') {
         workerGlobal.onmessage = function (ev) {
-            var data = ev.data || {};
+            var data = (ev && ev.data) || {};
             var id = data.id;
             if (data.type === 'wipe') {
                 wipeSession();

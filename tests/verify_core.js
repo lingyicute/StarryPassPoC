@@ -81,6 +81,26 @@ for (const crypto of [undefined, { getRandomValues() { throw new Error('RNG_UNAV
         check(() => assert.equal(state.sessionNonce, null));
     }
 }
+// 瞬时 CSPRNG 故障恢复后，后续派生应重新建立随机 nonce 并恢复会话缓存。
+{
+    let failRng = true;
+    const partialBuffers = [];
+    const flakyCrypto = {
+        getRandomValues(buf) {
+            partialBuffers.push(buf);
+            if (failRng) { buf[0] = 0x7f; throw new Error('TRANSIENT_RNG'); }
+            for (let i = 0; i < buf.length; i++) buf[i] = i + 1;
+            return buf;
+        }
+    };
+    const engine = loadCore({ crypto: flakyCrypto })(null, false);
+    check(() => assert.equal(engine.deriveSync(request).cached, false));
+    check(() => assert.ok(allZero(partialBuffers[0]), 'transient RNG failure zeroes partial nonce'));
+    failRng = false;
+    check(() => assert.equal(engine.deriveSync(request).cached, false));
+    check(() => assert.equal(engine.deriveSync(request).cached, true, 'cache recovers after transient RNG failure'));
+    engine.wipeSession();
+}
 
 // WASM 编译失败是可见的正常降级，不可误报成内存不足。
 const warnings = [];
