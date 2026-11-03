@@ -27,6 +27,8 @@
                 theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             }
             document.documentElement.setAttribute('data-theme', theme);
+            var meta = document.getElementById('theme-color-meta');
+            if (meta) meta.setAttribute('content', theme === 'dark' ? '#111318' : '#f9f9ff');
         })();
     </script>
     <style>
@@ -1081,12 +1083,14 @@
                 try { localStorage.setItem('sp-theme', next); } catch (e) {}
             });
 
+            function setMasterVisible(showing) {
+                masterInput.type = showing ? 'text' : 'password';
+                visibilityBtn.setAttribute('aria-pressed', String(showing));
+                visibilityBtn.setAttribute('aria-label', showing ? '隐藏主密码' : '显示主密码');
+                visibilityBtn.querySelector('svg path').setAttribute('d', showing ? ICONS.eyeOff : ICONS.eye);
+            }
             visibilityBtn.addEventListener('click', function () {
-                var showing = masterInput.type === 'text';
-                masterInput.type = showing ? 'password' : 'text';
-                visibilityBtn.setAttribute('aria-pressed', String(!showing));
-                visibilityBtn.setAttribute('aria-label', showing ? '显示主密码' : '隐藏主密码');
-                visibilityBtn.querySelector('svg path').setAttribute('d', showing ? ICONS.eye : ICONS.eyeOff);
+                setMasterVisible(masterInput.type !== 'text');
                 masterInput.focus();
             });
 
@@ -1096,22 +1100,27 @@
                 });
             }
             document.getElementById('len-chips').addEventListener('click', function (e) {
-                var btn = e.target.closest('[data-len]'); if (!btn) return;
-                if (btn.disabled) return;
-                state.length = parseInt(btn.getAttribute('data-len'), 10);
+                var btn = e.target.closest('[data-len]'); if (!btn || btn.disabled) return;
+                var next = parseInt(btn.getAttribute('data-len'), 10);
+                if (next === state.length) return;
+                state.length = next;
                 syncLengthChips();
                 scheduleRefresh();
             });
             document.getElementById('mode-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-mode]'); if (!btn) return;
-                state.mode = btn.getAttribute('data-mode');
+                var next = btn.getAttribute('data-mode');
+                if (next === state.mode) return;
+                state.mode = next;
                 setChipGroup(this, 'data-mode', state.mode);
                 syncLengthChips();
                 scheduleRefresh();
             });
             document.getElementById('tier-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-tier]'); if (!btn) return;
-                state.tier = btn.getAttribute('data-tier');
+                var next = btn.getAttribute('data-tier');
+                if (next === state.tier) return;
+                state.tier = next;
                 setChipGroup(this, 'data-tier', state.tier);
                 scheduleRefresh();
             });
@@ -1123,15 +1132,23 @@
                 counterInput.value = String(state.counter);
             }
             document.getElementById('ctr-dec').addEventListener('click', function () {
-                counterInput.value = String(Math.max(1, (parseInt(counterInput.value, 10) || 1) - 1));
-                clampCounter(); scheduleRefresh();
+                var prev = state.counter;
+                counterInput.value = String(Math.max(1, readCounter() - 1));
+                clampCounter();
+                if (state.counter !== prev) scheduleRefresh();
             });
             document.getElementById('ctr-inc').addEventListener('click', function () {
-                counterInput.value = String(Math.min(9999, (parseInt(counterInput.value, 10) || 1) + 1));
-                clampCounter(); scheduleRefresh();
+                var prev = state.counter;
+                counterInput.value = String(Math.min(9999, readCounter() + 1));
+                clampCounter();
+                if (state.counter !== prev) scheduleRefresh();
             });
             counterInput.addEventListener('input', function () { state.counter = readCounter(); scheduleRefresh(); });
-            counterInput.addEventListener('change', function () { clampCounter(); scheduleRefresh(); });
+            counterInput.addEventListener('change', function () {
+                var prev = state.counter;
+                clampCounter();
+                if (state.counter !== prev) scheduleRefresh();
+            });
 
             function setStrength(est) {
                 strength.setAttribute('data-level', String(est.level));
@@ -1326,6 +1343,9 @@
                 var hasInput = master !== '' && code.trim() !== '';
                 clearCodeBtn.hidden = code === '';
                 clearCodeBtn.disabled = code === '';
+                if (code === '') {
+                    clearCodeBtn.querySelectorAll('.ripple-wave').forEach(function (w) { w.remove(); });
+                }
                 resetBtn.disabled = !master && !code;
                 pwdLength.textContent = effectiveLength() + ' 位';
                 showEmpty(hasInput ? '生成中…' : (master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号'));
@@ -1341,8 +1361,8 @@
                 });
             }
 
-            function scheduleRefresh() {
-                if (invalidateResult()) debounceTimer = setTimeout(refresh, 280);
+            function scheduleRefresh(e) {
+                if (invalidateResult() && !(e && e.isComposing)) debounceTimer = setTimeout(refresh, 280);
             }
             masterInput.addEventListener('input', scheduleRefresh);
             codeInput.addEventListener('input', scheduleRefresh);
@@ -1399,6 +1419,8 @@
                 pendingPayload = null;
                 stopWorker();
                 if (localEngine) localEngine.wipeSession();
+                setMasterVisible(false);
+                showEmpty('请输入主密码和代号');
             }
             resetBtn.addEventListener('click', function () {
                 masterInput.value = ''; codeInput.value = '';
@@ -1412,6 +1434,7 @@
 
             document.querySelectorAll('.ripple').forEach(function (btn) {
                 btn.addEventListener('pointerdown', function (e) {
+                    if (btn.disabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
                     var rect = btn.getBoundingClientRect();
                     var size = Math.max(rect.width, rect.height) * 2.2;
                     var wave = document.createElement('span');
@@ -1420,7 +1443,9 @@
                     wave.style.left = (e.clientX - rect.left - size / 2) + 'px';
                     wave.style.top = (e.clientY - rect.top - size / 2) + 'px';
                     btn.appendChild(wave);
-                    wave.addEventListener('animationend', function () { wave.remove(); });
+                    function removeWave() { wave.remove(); }
+                    wave.addEventListener('animationend', removeWave);
+                    wave.addEventListener('animationcancel', removeWave);
                 });
             });
 
