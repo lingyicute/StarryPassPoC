@@ -243,6 +243,16 @@ async def test_copy_and_theme(browser, url):
     print('PASS browser: async clipboard feedback, focus and theme restore')
 
 
+async def test_counter_accessible_name(browser, url):
+    context, page = await mock_page(browser, url)
+    try:
+        check(await page.get_by_role('spinbutton', name='轮换序号').count() == 1,
+              'counter number input exposes an accessible name')
+    finally:
+        await context.close()
+    print('PASS browser: counter input accessible name')
+
+
 async def test_real_crypto(browser, url):
     context = await browser.new_context(ignore_https_errors=True)
     page = await context.new_page()
@@ -354,6 +364,7 @@ async def main():
                     await test_timeout_and_reset(browser, url)
                     await test_local_fallback(browser, url)
                     await test_copy_and_theme(browser, url)
+                    await test_counter_accessible_name(browser, url)
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
                 finally:
