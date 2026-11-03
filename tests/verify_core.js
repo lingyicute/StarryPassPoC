@@ -100,4 +100,28 @@ for (const tier of ['bogus', '__proto__', 'constructor', null, ['standard']]) ch
 for (const mode of ['bogus', '__proto__', 'constructor', null, ['full']]) check(() => assert.throws(
     () => cachedCore.deriveSync({ ...request, mode }), /INVALID_MODE/));
 check(() => assert.throws(() => cachedCore.deriveSync(null), /INVALID_REQUEST/));
+// 编码阶段部分失败必须清零已编码的主密码；Worker 响应 id 取自收到消息时的快照。
+{
+    const encoded = [];
+    class FaultyEncoder extends TextEncoder {
+        encode(value) {
+            if (value === request.code) throw new Error('INJECTED_ENCODE_FAILURE');
+            const out = super.encode(value);
+            encoded.push(out);
+            return out;
+        }
+    }
+    const faultyEngine = loadCore({ TextEncoder: FaultyEncoder })(null, false);
+    check(() => assert.throws(() => faultyEngine.deriveSync(request), /INJECTED_ENCODE_FAILURE/));
+    check(() => assert.equal(encoded.length, 1));
+    check(() => assert.ok(allZero(encoded[0]), 'partial canonicalize clears masterBytes'));
+
+    const messages = [];
+    const worker = { postMessage(msg) { messages.push(msg); } };
+    factory(worker, false);
+    const deriveEnv = { ...request, id: 101, type: 'derive', get code() { this.id = 999; return request.code; } };
+    worker.onmessage({ data: deriveEnv });
+    check(() => assert.equal(messages[0].id, 101));
+    check(() => assert.equal(messages[0].ok, true));
+}
 console.log(`PASS core: ${checks} parameter, engine, cache and cleanup checks`);
