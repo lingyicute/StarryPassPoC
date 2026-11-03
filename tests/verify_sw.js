@@ -75,6 +75,12 @@ async function checkText(e, expected) {
     await finish(install);
     check(() => assert.ok(installs.some((r) => r.url.endsWith('/manifest.webmanifest'))));
     check(() => assert.ok(installs.some((r) => r.url.endsWith('/assets/img/icons/192.png'))));
+    // iOS 添加到主屏幕只认 apple-touch-icon；图标必须声明且随安装预缓存。
+    const appleHref = /<link\s+rel="apple-touch-icon"[^>]*\shref="\.\/([^"]+)"/.exec(
+        fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8'));
+    check(() => assert.ok(appleHref, 'index.html declares apple-touch-icon'));
+    check(() => assert.ok(installs.some((r) => r.url.endsWith('/' + appleHref[1])), 'apple-touch-icon is precached'));
+    check(() => assert.ok(fs.existsSync(path.join(__dirname, '..', appleHref[1]))));
     check(() => assert.ok(installs.every((r) => r.cache === 'reload')));
     for (const name of ['other-app', 'spv2:/other/:precache-v1', 'spv2-precache-vlegacy', names.CACHE_PREFIX + 'precache-vold']) {
         stores.set(name, new Map());
