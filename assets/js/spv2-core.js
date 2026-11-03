@@ -473,7 +473,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function getArena(requiredBytes) {
-        if (!forcePureJs && typeof WebAssembly === 'object' && typeof WebAssembly.Module === 'function') {
+        if (!forcePureJs && typeof WebAssembly === 'object' && WebAssembly && typeof WebAssembly.Module === 'function') {
             try {
                 var neededPages = Math.ceil(requiredBytes / 65536);
                 if (!wasmState) {
@@ -500,7 +500,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             } catch (err) {
                 if (wasmState && wasmState.pages < Math.ceil(requiredBytes / 65536)
                         && requiredBytes >= 100 * 1048576) throw new Error('MEMORY_LIMIT');
-                if (typeof console === 'object' && typeof console.warn === 'function') {
+                if (typeof console === 'object' && console && typeof console.warn === 'function') {
                     console.warn('[spv2] WASM 不可用，本次回退纯 JS：' + (err && err.message ? err.message : err));
                 }
             }
@@ -509,7 +509,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         try {
             buf = new ArrayBuffer(requiredBytes);
         } catch (err) {
-            if (err instanceof RangeError) throw new Error('MEMORY_LIMIT');
+            if (err && (err instanceof RangeError || err.name === 'RangeError')) throw new Error('MEMORY_LIMIT');
             throw err;
         }
         var i32 = new Int32Array(buf);
@@ -670,7 +670,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         } finally {
             // 覆盖整个 arena（包括增长后的尾部），异常路径也必须执行；不代表归还内存。
             if (ctx) zeroize(ctx.arena.u8);
-            zeroize(JS_R); zeroize(JS_Z);
+            zeroize(SHA256_W); zeroize(B2B_V); zeroize(B2B_M); zeroize(JS_R); zeroize(JS_Z);
         }
     }
 
@@ -799,7 +799,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         if (!sessionNonce) {
             var nonce = new Uint8Array(32);
             try {
-                if (typeof crypto !== 'object' || typeof crypto.getRandomValues !== 'function') {
+                if (typeof crypto !== 'object' || !crypto || typeof crypto.getRandomValues !== 'function') {
                     throw new Error('NO_CSPRNG');
                 }
                 crypto.getRandomValues(nonce);
@@ -855,6 +855,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     function canonicalizeInputs(req) {
         if (!req || typeof req !== 'object') throw new Error('INVALID_REQUEST');
+        if (typeof req.master === 'symbol' || typeof req.code === 'symbol') throw new TypeError('INVALID_INPUT');
         // 保留省略参数时的原有默认值，但显式未知值不能静默降级。
         var tier = req.tier === undefined ? 'standard' : req.tier;
         var mode = req.mode === undefined ? 'full' : req.mode;
@@ -954,7 +955,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     };
 }
 
-if (typeof module === 'object' && module.exports) {
+if (typeof module === 'object' && module && module.exports) {
     module.exports = { spv2CoreFactory: spv2CoreFactory };
 } else {
     root.spv2CoreFactory = spv2CoreFactory;
