@@ -1175,7 +1175,22 @@
                 return '派生失败，请重试';
             }
 
+            function validPassword(pwd, payload) {
+                if (typeof pwd !== 'string' || !pwd.length || pwd.length !== payload.length) return false;
+                var pool = payload.mode === 'pin' ? '0123456789'
+                    : 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                if (payload.mode === 'full') pool += '!@#$%^&*()-_=+?';
+                for (var i = 0; i < pwd.length; i++) {
+                    if (pool.indexOf(pwd.charAt(i)) === -1) return false;
+                }
+                return true;
+            }
+
             function applyPassword(pwd, payload) {
+                if (!validPassword(pwd, payload)) {
+                    showEmpty(errorText(null));
+                    return;
+                }
                 output.textContent = pwd;
                 output.classList.remove('password--empty');
                 copyBtn.disabled = false;
@@ -1239,7 +1254,7 @@
                     var engine = ensureLocalEngine();
                     if (!engine) throw new Error('ENGINE_UNAVAILABLE');
                     var res = engine.deriveSync(payload);
-                    if (isCurrent(payload)) applyPassword(res.password, payload);
+                    if (isCurrent(payload)) applyPassword(res && res.password, payload);
                 } catch (err) {
                     if (isCurrent(payload)) showEmpty(errorText(err));
                 }

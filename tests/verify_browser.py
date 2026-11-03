@@ -253,6 +253,71 @@ async def test_counter_accessible_name(browser, url):
     print('PASS browser: counter input accessible name')
 
 
+async def test_malformed_results(browser, url):
+    # Worker 回包的 ok 必须严格为 true，输出须符合所请求的字符集与长度。
+    # 这是故障注入，并不表示真实引擎通常会产生畸形结果。
+    context, page = await mock_page(browser, url)
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    invalid = [
+        {'ok': 'true', 'password': FAKE_PASSWORD}, {'ok': True},
+        {'ok': True, 'password': None}, {'ok': True, 'password': 32},
+        {'ok': True, 'password': ''}, {'ok': True, 'password': 'SHORT'},
+        {'ok': True, 'password': '星' * 16}, {'ok': True, 'password': '|' * 16},
+        {'ok': True, 'password': '0' * 17},
+    ]
+    try:
+        for index, data in enumerate(invalid):
+            await fill(page, code=f'bad-worker-result-{index}'); await page.clock.run_for(300)
+            sent = await requests(page)
+            check(len(sent) == index + 1, 'malformed Worker response never blocks the next request')
+            await page.evaluate('data => __workers.at(-1).reply(data)', {'id': sent[-1]['id'], **data})
+            check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar')
+                  and '派生失败' in await page.inner_text('#password-output'), 'malformed Worker result fails closed')
+        for mode, bad in [('alnum', '!' * 16), ('pin', 'ABCDEF')]:
+            await page.click(f'#mode-chips [data-mode={mode}]'); await page.clock.run_for(300)
+            await reply(page, (await requests(page))[-1], bad)
+            check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar'), mode + ' rejects a wrong character pool')
+        await fill(page, code='valid-after-malformed'); await page.clock.run_for(300)
+        await reply(page, (await requests(page))[-1], '845961')
+        check(await page.is_enabled('#copy-btn'), 'valid PIN recovers after malformed Worker replies')
+        check(errors == [], 'malformed Worker results cause no uncaught page exception')
+    finally:
+        await context.close()
+
+    # 本地回退路径是同步 API；畸形返回值与抛错的 getter 都必须失败关闭并收尾。
+    context = await browser.new_context(ignore_https_errors=True, service_workers='block')
+    await context.route('**/assets/js/spv2-core.js', lambda route: route.fulfill(
+        content_type='text/javascript', body="""
+        window.__localResult=null;
+        window.spv2CoreFactory=()=>({
+            deriveSync(){return typeof __localResult==='function'?__localResult():__localResult;},
+            wipeSession(){}
+        });"""))
+    page = await context.new_page(); await page.clock.install()
+    await page.add_init_script("window.Worker=class{constructor(){throw new Error('blocked')}}")
+    errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
+    local_invalid = ['null', 'false', '32', '({})', "({password:false})", "({password:''})",
+                     "({password:'SHORT'})", "({password:'\u661f'.repeat(16)})", "({password:'|'.repeat(16)})",
+                     "(()=>{throw new Error('INJECTED_sync_derive')})",
+                     "({get password(){throw new Error('INJECTED_result_getter')}})"]
+    try:
+        await page.goto(url)
+        for index, expression in enumerate(local_invalid):
+            await page.evaluate(f'() => {{ window.__localResult = {expression}; }}')
+            await fill(page, code=f'bad-local-result-{index}'); await page.clock.run_for(300)
+            check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar')
+                  and '派生失败' in await page.inner_text('#password-output'), 'malformed local result fails closed and finishes')
+        await page.evaluate('password => { window.__localResult = {password}; }', FAKE_PASSWORD)
+        await fill(page, code='valid-after-local-error'); await page.clock.run_for(300)
+        check(await page.is_enabled('#copy-btn') and await page.inner_text('#password-output') == FAKE_PASSWORD,
+              'valid local result recovers after malformed completions')
+        check(errors == [], 'malformed local results cause no unhandled page exception')
+    finally:
+        await context.close()
+    print('PASS browser: malformed Worker/local responses, strict success flag, output bounds and recovery')
+
+
 async def test_real_crypto(browser, url):
     context = await browser.new_context(ignore_https_errors=True)
     page = await context.new_page()
@@ -365,6 +430,7 @@ async def main():
                     await test_local_fallback(browser, url)
                     await test_copy_and_theme(browser, url)
                     await test_counter_accessible_name(browser, url)
+                    await test_malformed_results(browser, url)
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
                 finally:
