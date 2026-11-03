@@ -1311,7 +1311,8 @@
             masterInput.addEventListener('compositionend', scheduleRefresh);
             codeInput.addEventListener('compositionend', scheduleRefresh);
             codeInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' && !copyBtn.disabled) copyBtn.click();
+                // 输入法选词用的回车（isComposing / keyCode 229）不能触发复制。
+                if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229 && !copyBtn.disabled) copyBtn.click();
             });
 
             function copyText(text) {
