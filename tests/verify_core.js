@@ -112,6 +112,8 @@ check(() => assert.match(warnings[0], /INJECTED_WASM_BLOCK/));
 // 纯 JS 分配失败也映射为可识别的内存错误。
 const noMemory = loadCore({ ArrayBuffer: function () { throw new RangeError('allocation failed'); } })(null, true);
 check(() => assert.throws(() => noMemory._test.getArena(40 * 1024), /MEMORY_LIMIT/));
+const crossRealmOom = loadCore({ WebAssembly: null, console: null, ArrayBuffer: function () { const e = new Error('oom'); e.name = 'RangeError'; throw e; } })(null, false);
+check(() => assert.throws(() => crossRealmOom._test.getArena(40 * 1024), /MEMORY_LIMIT/));
 
 // 省略可选参数仍按原有默认值；显式非法值（含原型属性名）必须拒绝。
 check(() => assert.equal(cachedCore.deriveSync({ master: request.master, code: request.code }).password, 'WueNKY^SRHRh4!DL'));
@@ -120,6 +122,8 @@ for (const tier of ['bogus', '__proto__', 'constructor', null, ['standard']]) ch
 for (const mode of ['bogus', '__proto__', 'constructor', null, ['full']]) check(() => assert.throws(
     () => cachedCore.deriveSync({ ...request, mode }), /INVALID_MODE/));
 check(() => assert.throws(() => cachedCore.deriveSync(null), /INVALID_REQUEST/));
+check(() => assert.throws(() => cachedCore.deriveSync({ ...request, master: Symbol('m') }), TypeError));
+check(() => assert.throws(() => cachedCore.deriveSync({ ...request, code: Symbol('c') }), TypeError));
 // 编码阶段部分失败必须清零已编码的主密码；Worker 响应 id 取自收到消息时的快照。
 {
     const encoded = [];
