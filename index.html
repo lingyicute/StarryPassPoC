@@ -959,7 +959,8 @@
                 if (!m || !c) return { level: 0, label: '—', bits: 0 };
                 // 仅为输出空间的理论上界，不是精确熵；字符类别约束会进一步缩小空间。
                 var poolSize = mode === 'pin' ? 10 : (mode === 'alnum' ? 62 : 77);
-                var outBits = Math.max(0, Number(length) || 0) * Math.log2(poolSize);
+                var len = Number(length);
+                var outBits = (Number.isFinite(len) && len > 0 ? len : 0) * Math.log2(poolSize);
                 var mLower = m.toLowerCase(), cLower = c.toLowerCase();
                 if (cLower.length >= 2 && mLower.indexOf(cLower) !== -1)
                     return { level: 1, label: '弱 · 主密码勿含代号', bits: Math.round(Math.min(16, outBits)) };
@@ -1148,11 +1149,13 @@
                 state.counter = readCounter();
                 if (state.counter !== prev) scheduleRefresh();
             });
-            counterInput.addEventListener('change', function () {
+            function commitCounter() {
                 var prev = state.counter;
                 clampCounter();
                 if (state.counter !== prev) scheduleRefresh();
-            });
+            }
+            counterInput.addEventListener('change', commitCounter);
+            counterInput.addEventListener('blur', commitCounter);
 
             function setStrength(est) {
                 strength.setAttribute('data-level', String(est.level));
@@ -1367,26 +1370,37 @@
                 });
             }
 
+            var masterComposing = false, codeComposing = false;
             function scheduleRefresh(e) {
-                var composing = !!(e && e.isComposing);
+                var composing = !!(e && e.isComposing) || masterComposing || codeComposing;
                 if (invalidateResult(composing) && !composing) debounceTimer = setTimeout(refresh, 280);
             }
-            masterInput.addEventListener('input', scheduleRefresh);
-            codeInput.addEventListener('input', scheduleRefresh);
-            masterInput.addEventListener('compositionend', scheduleRefresh);
-            codeInput.addEventListener('compositionend', scheduleRefresh);
+            masterInput.addEventListener('compositionstart', function () { masterComposing = true; scheduleRefresh({ isComposing: true }); });
+            codeInput.addEventListener('compositionstart', function () { codeComposing = true; scheduleRefresh({ isComposing: true }); });
+            masterInput.addEventListener('input', function (e) { if (e && typeof e.isComposing === 'boolean') masterComposing = e.isComposing; scheduleRefresh(e); });
+            codeInput.addEventListener('input', function (e) { if (e && typeof e.isComposing === 'boolean') codeComposing = e.isComposing; scheduleRefresh(e); });
+            masterInput.addEventListener('compositionend', function () { masterComposing = false; scheduleRefresh({ isComposing: false }); });
+            codeInput.addEventListener('compositionend', function () { codeComposing = false; scheduleRefresh({ isComposing: false }); });
+            masterInput.addEventListener('blur', function () { if (masterComposing) { masterComposing = false; scheduleRefresh({ isComposing: false }); } });
+            codeInput.addEventListener('blur', function () { if (codeComposing) { codeComposing = false; scheduleRefresh({ isComposing: false }); } });
             codeInput.addEventListener('keydown', function (e) {
                 // 输入法选词用的回车（isComposing / keyCode 229）不能触发复制。
                 if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229 && !copyBtn.disabled) copyBtn.click();
             });
 
-            function copyText(text) {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    return navigator.clipboard.writeText(text).then(function () { return true; }, function () {
-                        return fallbackCopy(text);
-                    });
+            function copyText(text, isStillValid) {
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    try {
+                        return Promise.resolve(navigator.clipboard.writeText(text)).then(function () {
+                            return true;
+                        }, function () {
+                            return (!isStillValid || isStillValid()) ? fallbackCopy(text) : false;
+                        });
+                    } catch (e) {
+                        return Promise.resolve((!isStillValid || isStillValid()) ? fallbackCopy(text) : false);
+                    }
                 }
-                return Promise.resolve(fallbackCopy(text));
+                return Promise.resolve((!isStillValid || isStillValid()) ? fallbackCopy(text) : false);
             }
             function fallbackCopy(text) {
                 var active = document.activeElement;
@@ -1404,8 +1418,11 @@
             copyBtn.addEventListener('click', function () {
                 if (copyBtn.disabled) return;
                 var text = output.textContent, copiedId = deriveId;
-                copyText(text).then(function (ok) {
-                    if (copiedId !== deriveId || copyBtn.disabled) return;
+                function isStillValid() {
+                    return copiedId === deriveId && !copyBtn.disabled && output.textContent === text;
+                }
+                copyText(text, isStillValid).then(function (ok) {
+                    if (!isStillValid()) return;
                     if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
                     showSnackbar('密码已复制到剪贴板');
                     copyBtn.classList.add('is-copied');
@@ -1422,6 +1439,7 @@
 
             function wipe() {
                 deriveId += 1;
+                masterComposing = false; codeComposing = false;
                 clearTimeout(debounceTimer); debounceTimer = null;
                 pendingPayload = null;
                 stopWorker();
@@ -1462,6 +1480,7 @@
             });
 
             initTheme();
+            clampCounter();
             syncLengthChips();
             refresh();
 

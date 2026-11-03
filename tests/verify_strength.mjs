@@ -66,6 +66,7 @@ vm.runInContext('delete Object.prototype.unlistedweakroot', context);
 
 // Earlier guards and existing strength/PIN branches retain their priority.
 assert.deepEqual(estimate('', 'site'), { level: 0, label: '—', bits: 0 });
+assert.equal(estimate('correct horse battery staple', 'unique-site-code', 'standard', 'full', Infinity).bits, 0);
 assert.deepEqual(estimate('password', '   '), { level: 0, label: '—', bits: 0 });
 assert.deepEqual(estimate('password', 'password'), { level: 1, label: '弱 · 主密码勿含代号', bits: 16 });
 assert.deepEqual(estimate('20000101'), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
