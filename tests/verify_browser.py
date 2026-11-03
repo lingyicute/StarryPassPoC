@@ -464,6 +464,78 @@ async def test_service_worker_read_failure(browser, url):
     print('PASS browser: real CacheStorage precache fallback during runtime read failure')
 
 
+async def test_tap_feedback_and_keyboard_focus(browser, url):
+    # Chromium touch emulation checks inherited style and real touch events;
+    # it is not a claim of Safari/iPhone hardware coverage.
+    context = await browser.new_context(ignore_https_errors=True,
+                                        viewport={'width': 390, 'height': 844},
+                                        is_mobile=True, has_touch=True)
+    page = await context.new_page()
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        await page.goto(url)
+        check(await page.evaluate("navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches"),
+              'mobile feedback test uses a touch-capable coarse-pointer context')
+        colors = await page.evaluate("""['html', 'body', '#theme-toggle', '#master-input',
+            '#code-input', '#policy summary'].map(selector => ({selector,
+                color:getComputedStyle(document.querySelector(selector)).webkitTapHighlightColor}))""")
+        check(all(row['color'] == 'rgba(0, 0, 0, 0)' for row in colors),
+              'transparent native tap highlight inherits to root, inputs and summary, not just buttons')
+        await page.evaluate("""() => {
+            const button=document.getElementById('theme-toggle');
+            button.addEventListener('pointerdown', event => {
+                const wave=button.querySelector('.ripple-wave');
+                self.__touchFeedback={pointer:event.pointerType, wave:!!wave,
+                    animation:wave ? getComputedStyle(wave).animationName : null};
+            }, {once:true});
+        }""")
+        theme = await page.get_attribute('html', 'data-theme')
+        await page.locator('#theme-toggle').tap()
+        check(await page.get_attribute('html', 'data-theme') != theme,
+              'real touch still activates the theme button')
+        feedback = await page.evaluate('__touchFeedback')
+        check(feedback == {'pointer': 'touch', 'wave': True, 'animation': 'ripple'},
+              'real touch keeps the custom animated ripple')
+        await page.locator('#policy summary').tap()
+        check(await page.evaluate("document.getElementById('policy').open"),
+              'native highlight suppression does not disable summary touch activation')
+        await page.locator('#master-input').tap()
+        check(await page.evaluate("document.activeElement.id === 'master-input'"),
+              'native highlight suppression does not block input touch focus')
+        check(errors == [], 'touch feedback causes no unhandled page exception')
+    finally:
+        await context.close()
+
+    context = await browser.new_context(ignore_https_errors=True)
+    page = await context.new_page()
+    try:
+        await page.goto(url)
+        await page.keyboard.press('Tab')
+        focus = await page.evaluate("""() => {
+            const element=document.activeElement, style=getComputedStyle(element);
+            return {id:element.id, visible:element.matches(':focus-visible'),
+                outline:style.outlineStyle, width:parseFloat(style.outlineWidth),
+                offset:parseFloat(style.outlineOffset), color:style.outlineColor};
+        }""")
+        check(focus['id'] == 'theme-toggle' and focus['visible'],
+              'real keyboard Tab retains a focus-visible control')
+        check(focus['outline'] == 'solid' and focus['width'] >= 3 and focus['offset'] >= 2
+              and focus['color'] != 'rgba(0, 0, 0, 0)',
+              'keyboard focus retains its visible three-pixel outline')
+        await page.locator('#theme-toggle').hover()
+        before = await page.locator('#theme-toggle').evaluate('element => getComputedStyle(element).backgroundColor')
+        await page.mouse.down()
+        active = await page.locator('#theme-toggle').evaluate("""element => ({
+            active:element.matches(':active'), background:getComputedStyle(element).backgroundColor})""")
+        check(active['active'] and active['background'] != before,
+              'custom pressed-state background is not suppressed')
+        await page.mouse.up()
+    finally:
+        await context.close()
+    print('PASS browser: inherited native tap suppression, real touch ripple and visible keyboard focus')
+
+
 async def main():
     with tempfile.TemporaryDirectory(prefix='starrypass-browser-') as temporary:
         site = Path(temporary)
@@ -510,6 +582,7 @@ async def main():
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
                     await test_service_worker_read_failure(browser, url)
+                    await test_tap_feedback_and_keyboard_focus(browser, url)
                 finally:
                     await browser.close()
         finally:
