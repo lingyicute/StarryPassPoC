@@ -5,15 +5,26 @@ const path = require('node:path');
 const vm = require('node:vm');
 const base = 'https://example.test/app/';
 const handlers = {}, stores = new Map(), installs = [];
-let fetchImpl, putGate = null, putError = null, networkCalls = 0, checks = 0;
+let fetchImpl, putGate = null, putError = null, openError = null, matchError = null, networkCalls = 0, checks = 0;
 const check = (fn) => { fn(); checks++; };
 const key = (request) => new URL(typeof request === 'string' ? request : request.url, base).href;
+function cachedMatch(name, request) {
+    if (matchError === 'all' || matchError === name) throw new Error('INJECTED_cache_match');
+    const response = stores.get(name)?.get(key(request));
+    return response && response.clone();
+}
 const caches = {
+    async match(request, options = {}) {
+        if (options.cacheName !== undefined) return cachedMatch(options.cacheName, request);
+        for (const name of stores.keys()) { const response = cachedMatch(name, request); if (response) return response; }
+        return undefined;
+    },
     async open(name) {
+        if (openError === 'all' || openError === name) throw new Error('INJECTED_cache_open');
         if (!stores.has(name)) stores.set(name, new Map());
         const store = stores.get(name);
         return {
-            async match(request) { const response = store.get(key(request)); return response && response.clone(); },
+            async match(request) { return cachedMatch(name, request); },
             async put(request, response) {
                 if (putGate) await putGate;
                 if (putError) throw putError;
@@ -217,5 +228,57 @@ async function checkText(e, expected) {
     const offlineFast = event('fetch', req('assets/js/spv2-core.js', 'cors'));
     await checkText(offlineFast, 'FAST CORE'); await finish(offlineFast);
     check(() => assert.equal(timers.size, 0));
+
+    // Runtime may not exist and cannot be opened (quota/storage fault), but
+    // an installed precache is still usable. Reads must not create new caches.
+    putError = null;
+    stores.delete(names.RUNTIME);
+    openError = names.RUNTIME;
+    fetchImpl = offline;
+    const noRuntime = event('fetch', req('?runtime-unavailable=1'));
+    await checkText(noRuntime, 'INSTALLED ' + names.SHELL_URL); await finish(noRuntime);
+    check(() => assert.equal(stores.has(names.RUNTIME), false, 'offline read never needs to create runtime cache'));
+    const noRuntimeCore = event('fetch', req('assets/js/spv2-core.js', 'cors'));
+    await checkText(noRuntimeCore, 'INSTALLED ' + base + 'assets/js/spv2-core.js'); await finish(noRuntimeCore);
+
+    stores.set(names.RUNTIME, new Map([[names.SHELL_URL, new Response('RUNTIME STILL USABLE')]]));
+    openError = null; matchError = names.RUNTIME;
+    const failedRuntimeRead = event('fetch', req());
+    await checkText(failedRuntimeRead, 'INSTALLED ' + names.SHELL_URL); await finish(failedRuntimeRead);
+
+    // Conversely, inaccessible precache must not hide an intact runtime shell.
+    openError = names.VERSION; matchError = names.VERSION;
+    const failedPrecacheRead = event('fetch', req());
+    await checkText(failedPrecacheRead, 'RUNTIME STILL USABLE'); await finish(failedPrecacheRead);
+
+    // Never cross into a different application's cache if both ours fail.
+    stores.get('other-app').set(names.SHELL_URL, new Response('FOREIGN CACHE MUST NOT LEAK'));
+    openError = 'all'; matchError = 'all';
+    const allUnavailable = event('fetch', req());
+    const allUnavailableResponse = await allUnavailable.response;
+    check(() => assert.equal(allUnavailableResponse.type, 'error')); await finish(allUnavailable);
+    // An unscoped caches.match would incorrectly return the foreign shell.
+    openError = null; matchError = null;
+    const savedPrecache = stores.get(names.VERSION), savedRuntime = stores.get(names.RUNTIME);
+    stores.delete(names.VERSION); stores.delete(names.RUNTIME);
+    const noOwnedCache = event('fetch', req());
+    check(() => assert.equal((stores.has(names.VERSION) || stores.has(names.RUNTIME)), false));
+    const noOwnedResponse = await noOwnedCache.response;
+    check(() => assert.equal(noOwnedResponse.type, 'error', 'do not read another app cache'));
+    await finish(noOwnedCache);
+    check(() => assert.equal(stores.has(names.VERSION) || stores.has(names.RUNTIME), false, 'missing caches remain uncreated'));
+    stores.set(names.VERSION, savedPrecache); stores.set(names.RUNTIME, savedRuntime);
+    openError = 'all'; matchError = 'all';
+    fetchImpl = async () => new Response('ORIGINAL SERVER FAILURE', {status:503});
+    const serverAndStorage = event('fetch', req());
+    check(() => assert.equal(serverAndStorage.waits.length, 1));
+    const serverFailureResponse = await serverAndStorage.response;
+    check(() => assert.equal(serverFailureResponse.status, 503));
+    await checkText(serverAndStorage, 'ORIGINAL SERVER FAILURE'); await finish(serverAndStorage);
+    fetchImpl = async () => new Response('ONLINE DESPITE STORAGE FAILURE');
+    const onlineStorageFailure = event('fetch', req());
+    await checkText(onlineStorageFailure, 'ONLINE DESPITE STORAGE FAILURE'); await finish(onlineStorageFailure);
+    openError = null; matchError = null;
+
     console.log(`PASS service worker: ${checks} scope, update, offline, deadline and lifetime checks`);
 })().catch((err) => { console.error(err); process.exitCode = 1; });
