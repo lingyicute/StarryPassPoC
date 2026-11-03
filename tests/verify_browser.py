@@ -318,6 +318,48 @@ async def test_malformed_results(browser, url):
     print('PASS browser: malformed Worker/local responses, strict success flag, output bounds and recovery')
 
 
+THEME_PROBE = """(() => {
+    // 记录 data-theme 的赋值时机：首帧前（<body> 尚未解析）就必须已写入主题。
+    window.__themeWrites = [];
+    const original = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+        if (this === document.documentElement && name === 'data-theme') {
+            __themeWrites.push({ value, bodyReady: !!document.body });
+        }
+        return original.call(this, name, value);
+    };
+})();"""
+
+
+async def test_theme_first_paint_and_system_follow(browser, url):
+    context = await browser.new_context(ignore_https_errors=True, color_scheme='dark')
+    page = await context.new_page()
+    try:
+        await page.add_init_script(THEME_PROBE)
+        await page.goto(url)
+        first = await page.evaluate('__themeWrites[0]')
+        check(first == {'value': 'dark', 'bodyReady': False}, 'dark OS theme is applied before the body is parsed')
+        check(await page.get_attribute('html', 'data-theme') == 'dark', 'dark OS theme stays after init')
+        await page.emulate_media(color_scheme='light')
+        await poll(lambda: page.evaluate("document.documentElement.dataset.theme === 'light'"))
+        check(await page.evaluate("document.getElementById('theme-color-meta').content") == '#f9f9ff',
+              'unsaved theme follows the OS and updates theme-color')
+        await page.emulate_media(color_scheme='dark')
+        await poll(lambda: page.evaluate("document.documentElement.dataset.theme === 'dark'"))
+        await page.click('#theme-toggle')
+        check(await page.get_attribute('html', 'data-theme') == 'light', 'manual toggle switches theme')
+        await page.emulate_media(color_scheme='light')
+        await page.emulate_media(color_scheme='dark')
+        await asyncio.sleep(0.2)
+        check(await page.get_attribute('html', 'data-theme') == 'light', 'saved manual theme ignores OS changes')
+        await page.reload()
+        check((await page.evaluate('__themeWrites[0]')) == {'value': 'light', 'bodyReady': False},
+              'saved theme beats the OS before first paint')
+    finally:
+        await context.close()
+    print('PASS browser: theme applied before first paint and OS changes followed until a manual choice')
+
+
 async def test_real_crypto(browser, url):
     context = await browser.new_context(ignore_https_errors=True)
     page = await context.new_page()
@@ -463,6 +505,7 @@ async def main():
                     await test_local_fallback(browser, url)
                     await test_copy_and_theme(browser, url)
                     await test_counter_accessible_name(browser, url)
+                    await test_theme_first_paint_and_system_follow(browser, url)
                     await test_malformed_results(browser, url)
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
