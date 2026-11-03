@@ -1143,7 +1143,11 @@
                 clampCounter();
                 if (state.counter !== prev) scheduleRefresh();
             });
-            counterInput.addEventListener('input', function () { state.counter = readCounter(); scheduleRefresh(); });
+            counterInput.addEventListener('input', function () {
+                var prev = state.counter;
+                state.counter = readCounter();
+                if (state.counter !== prev) scheduleRefresh();
+            });
             counterInput.addEventListener('change', function () {
                 var prev = state.counter;
                 clampCounter();
@@ -1275,10 +1279,11 @@
                 } catch (err) {
                     if (isCurrent(payload)) showEmpty(errorText(err));
                 }
-                finishOne();
+                finishOne(payload);
             }
 
-            function finishOne() {
+            function finishOne(payload) {
+                if (currentPayload !== payload) return;
                 busy = false;
                 currentPayload = null;
                 clearWatchdog();
@@ -1294,11 +1299,12 @@
             }
 
             function fallbackToLocal() {
+                var shouldRetry = isCurrent(pendingPayload || currentPayload) || !!debounceTimer;
                 stopWorker();
                 workerAllowed = false;
                 pendingPayload = null;
                 showSnackbar('兼容模式已启用（派生稍慢）');
-                refresh();
+                if (shouldRetry) refresh();
             }
 
             function startWorker() {
@@ -1324,7 +1330,7 @@
                             else showEmpty(errorText({ message: data.error }));
                         }
                     } finally {
-                        finishOne();
+                        finishOne(payload);
                     }
                 };
                 target.onerror = target.onmessageerror = function (ev) {
@@ -1334,7 +1340,7 @@
             }
             startWorker();
 
-            function invalidateResult() {
+            function invalidateResult(composing) {
                 clearTimeout(debounceTimer);
                 debounceTimer = null;
                 deriveId += 1;  // 输入/策略变化时立即作废，不能等 280 ms 防抖结束。
@@ -1349,12 +1355,12 @@
                 resetBtn.disabled = !master && !code;
                 pwdLength.textContent = effectiveLength() + ' 位';
                 showEmpty(hasInput ? '生成中…' : (master || code ? '请填写完整的主密码和代号' : '请输入主密码和代号'));
-                setBusy(hasInput);
+                setBusy(hasInput && !composing);
                 return hasInput;
             }
 
             function refresh() {
-                if (!invalidateResult()) return;
+                if (!invalidateResult(false)) return;
                 requestDerive({
                     id: deriveId, type: 'derive', master: masterInput.value, code: codeInput.value,
                     tier: state.tier, counter: state.counter, length: effectiveLength(), mode: state.mode
@@ -1362,7 +1368,8 @@
             }
 
             function scheduleRefresh(e) {
-                if (invalidateResult() && !(e && e.isComposing)) debounceTimer = setTimeout(refresh, 280);
+                var composing = !!(e && e.isComposing);
+                if (invalidateResult(composing) && !composing) debounceTimer = setTimeout(refresh, 280);
             }
             masterInput.addEventListener('input', scheduleRefresh);
             codeInput.addEventListener('input', scheduleRefresh);
@@ -1398,9 +1405,9 @@
                 if (copyBtn.disabled) return;
                 var text = output.textContent, copiedId = deriveId;
                 copyText(text).then(function (ok) {
+                    if (copiedId !== deriveId || copyBtn.disabled) return;
                     if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
                     showSnackbar('密码已复制到剪贴板');
-                    if (copiedId !== deriveId || copyBtn.disabled) return;
                     copyBtn.classList.add('is-copied');
                     copyLabel.textContent = '已复制';
                     copyBtn.querySelector('svg path').setAttribute('d', ICONS.check);
@@ -1419,6 +1426,8 @@
                 pendingPayload = null;
                 stopWorker();
                 if (localEngine) localEngine.wipeSession();
+                clearTimeout(snackbarTimer);
+                snackbar.classList.remove('is-visible');
                 setMasterVisible(false);
                 showEmpty('请输入主密码和代号');
             }
@@ -1429,7 +1438,10 @@
             clearCodeBtn.addEventListener('click', function () {
                 codeInput.value = ''; refresh(); codeInput.focus();
             });
-            window.addEventListener('pagehide', wipe);
+            window.addEventListener('pagehide', function () {
+                document.querySelectorAll('.ripple-wave').forEach(function (w) { w.remove(); });
+                wipe();
+            });
             window.addEventListener('pageshow', function (event) { if (event.persisted) refresh(); });
 
             document.querySelectorAll('.ripple').forEach(function (btn) {

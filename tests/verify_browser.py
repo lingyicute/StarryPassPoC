@@ -130,6 +130,9 @@ async def test_queue(browser, url):
         await page.dispatch_event('#counter-input', 'change')
         check(await page.is_enabled('#copy-btn') and await page.inner_text('#password-output') == FAKE_PASSWORD,
               'counter blur/change without value change preserves derived password')
+        await page.fill('#counter-input', '02')
+        check(await page.is_enabled('#copy-btn') and await page.inner_text('#password-output') == FAKE_PASSWORD,
+              'counter input without clamped value change preserves derived password')
         await page.fill('#counter-input', '100000')
         await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
@@ -143,7 +146,8 @@ async def test_queue(browser, url):
             input.value = 'ime-raw';
             input.dispatchEvent(new InputEvent('input', {bubbles: true, isComposing: true}));
         }""")
-        check(not await page.is_enabled('#copy-btn'), 'IME composition immediately invalidates previous output')
+        check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar'),
+              'IME composition immediately invalidates previous output without stuck busy bar')
         await page.clock.run_for(300)
         check(len(await requests(page)) == before_req_count, 'IME composition does not trigger KDF before compositionend')
         await page.evaluate("""() => {
@@ -157,10 +161,18 @@ async def test_queue(browser, url):
         await reply(page, (await requests(page))[-1])
         await page.click('#visibility-btn')
         check(await page.get_attribute('#master-input', 'type') == 'text', 'visibility toggle reveals master input')
+        await page.evaluate("""() => {
+            const wave = document.createElement('span');
+            wave.className = 'ripple-wave';
+            document.getElementById('visibility-btn').appendChild(wave);
+            document.getElementById('snackbar').classList.add('is-visible');
+        }""")
         await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pagehide'))")
         check(await page.get_attribute('#master-input', 'type') == 'password' and not await page.is_enabled('#copy-btn')
-              and await page.inner_text('#password-output') == '请输入主密码和代号',
-              'pagehide masks master input and clears displayed password from DOM')
+              and await page.inner_text('#password-output') == '请输入主密码和代号'
+              and await page.locator('.ripple-wave').count() == 0
+              and not await page.evaluate("document.getElementById('snackbar').classList.contains('is-visible')"),
+              'pagehide masks master input and clears displayed password, snackbar and ripples from DOM')
         await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
         await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
@@ -258,7 +270,9 @@ async def test_copy_and_theme(browser, url):
         await page.click('#copy-btn')
         await page.fill('#code-input', 'changed-while-copying')
         await page.evaluate('__resolveCopy()')
-        check(await page.inner_text('#copy-label') == '复制密码', 'old async copy cannot mark a newer result copied')
+        check(await page.inner_text('#copy-label') == '复制密码'
+              and not await page.evaluate("document.getElementById('snackbar').classList.contains('is-visible')"),
+              'old async copy cannot mark a newer result copied or pop a stale snackbar')
         check(await page.evaluate('__copied[0]') == FAKE_PASSWORD, 'copy captures the clicked result')
         await page.clock.run_for(45001)
         check(await page.evaluate('__reads') == 0, 'no unsolicited clipboard read or unreliable auto-wipe')
@@ -596,10 +610,13 @@ async def main():
                 super().end_headers()
 
             def do_GET(self):
-                if state['server_error']:
-                    self.send_error(503)
-                else:
-                    super().do_GET()
+                try:
+                    if state['server_error']:
+                        self.send_error(503)
+                    else:
+                        super().do_GET()
+                except (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError):
+                    pass
 
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Handler, directory=site))
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); tls.load_cert_chain(cert, key)
