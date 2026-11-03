@@ -141,9 +141,15 @@ async function checkText(e, expected) {
     const offlineCore = event('fetch', req('assets/js/spv2-core.js', 'cors'));
     await checkText(offlineCore, 'NEW CORE'); await finish(offlineCore);
 
-    fetchImpl = async () => new Response('server unavailable', { status: 503 });
+    let serverErrorBodyCanceled = false;
+    fetchImpl = async () => {
+        const resp = new Response('server unavailable', { status: 503 });
+        Object.defineProperty(resp, 'body', { value: { cancel: async () => { serverErrorBodyCanceled = true; } } });
+        return resp;
+    };
     const unavailable = event('fetch', req());
     await checkText(unavailable, 'NEW SHELL'); await finish(unavailable);
+    check(() => assert.equal(serverErrorBodyCanceled, true, '5xx fallback to cache cancels unused error body'));
     fetchImpl = async () => new Response('not found', { status: 404 });
     const missing = event('fetch', req());
     const missingResponse = await missing.response;
@@ -184,12 +190,14 @@ async function checkText(e, expected) {
     await checkText(stalled, 'NEW SHELL'); await finish(stalled);
     check(() => assert.equal(signal.aborted, true, 'timeout aborts the underlying request'));
     check(() => assert.equal(timers.size, 0));
-    let lateBodyRead = false;
+    let lateBodyRead = false, lateBodyCanceled = false;
     const lateResp = new Response('LATE SHELL MUST NOT REPLACE CACHE');
     lateResp.clone = () => ({ arrayBuffer: async () => { lateBodyRead = true; return new ArrayBuffer(0); } });
+    Object.defineProperty(lateResp, 'body', { value: { cancel: async () => { lateBodyCanceled = true; } } });
     resolveLate(lateResp);
     await tick();
     check(() => assert.equal(lateBodyRead, false, 'late response after timeout does not buffer body'));
+    check(() => assert.equal(lateBodyCanceled, true, 'late response after timeout cancels unconsumed body'));
     fetchImpl = offline;
     const stillLatest = event('fetch', req());
     await checkText(stillLatest, 'NEW SHELL'); await finish(stillLatest);
