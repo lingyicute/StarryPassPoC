@@ -15,7 +15,8 @@ const instrumented = source.replace(anchor, `${anchor},
             getArena: getArena,
             state: function () {
                 return { wasmState: wasmState, cachedTag: cachedTag, cachedSk: cachedSk,
-                    sessionNonce: sessionNonce, JS_R: JS_R, JS_Z: JS_Z };
+                    sessionNonce: sessionNonce, SHA256_W: SHA256_W, B2B_V: B2B_V, B2B_M: B2B_M,
+                    JS_R: JS_R, JS_Z: JS_Z };
             }
         }`);
 module.exports = function loadCore(overrides = {}) {

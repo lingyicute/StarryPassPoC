@@ -65,8 +65,10 @@ check(() => assert.ok(allZero(oldState.JS_R) && allZero(oldState.JS_Z)));
 oldState.wasmState.fn = originalCompress;
 check(() => assert.equal(cachedCore.deriveSync(request).password, 'WueNKY^SRHRh4!DL'));
 const beforeWipe = cachedCore._test.state();
+beforeWipe.SHA256_W.fill(7); beforeWipe.B2B_V.fill(7); beforeWipe.B2B_M.fill(7);
 cachedCore.wipeSession();
 check(() => assert.ok(allZero(beforeWipe.cachedSk) && allZero(beforeWipe.cachedTag) && allZero(beforeWipe.sessionNonce)));
+check(() => assert.ok(allZero(beforeWipe.SHA256_W) && allZero(beforeWipe.B2B_V) && allZero(beforeWipe.B2B_M)));
 
 // 没有 CSPRNG、或 CSPRNG 抛异常：派生仍确定且正确，但既不复用也不保留密钥缓存。
 for (const crypto of [undefined, { getRandomValues() { throw new Error('RNG_UNAVAILABLE'); } }]) {
@@ -124,6 +126,19 @@ for (const mode of ['bogus', '__proto__', 'constructor', null, ['full']]) check(
 check(() => assert.throws(() => cachedCore.deriveSync(null), /INVALID_REQUEST/));
 check(() => assert.throws(() => cachedCore.deriveSync({ ...request, master: Symbol('m') }), TypeError));
 check(() => assert.throws(() => cachedCore.deriveSync({ ...request, code: Symbol('c') }), TypeError));
+check(() => assert.throws(() => cachedCore.deriveSync({ ...request, counter: Symbol('n') }), TypeError));
+check(() => assert.throws(() => cachedCore.deriveSync({ ...request, length: Symbol('l') }), TypeError));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: 0 }).password.length, 4));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: '0' }).password.length, 4));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: 1e21 }).password.length, 64));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: '1e2' }).password.length, 64));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: 9e-7 }).password.length, 4));
+check(() => assert.equal(
+    cachedCore.deriveSync({ ...request, counter: '1e5' }).password,
+    cachedCore.deriveSync({ ...request, counter: 9999 }).password));
+check(() => assert.equal(
+    cachedCore.deriveSync({ ...request, counter: 5e-7 }).password,
+    cachedCore.deriveSync({ ...request, counter: 1 }).password));
 // 编码阶段部分失败必须清零已编码的主密码；Worker 响应 id 取自收到消息时的快照。
 {
     const encoded = [];
@@ -147,5 +162,9 @@ check(() => assert.throws(() => cachedCore.deriveSync({ ...request, code: Symbol
     worker.onmessage({ data: deriveEnv });
     check(() => assert.equal(messages[0].id, 101));
     check(() => assert.equal(messages[0].ok, true));
+    worker.onmessage({ data: { id: 102, get type() { throw new Error('BAD_ENVELOPE'); } } });
+    check(() => assert.equal(messages[1].id, 102));
+    check(() => assert.equal(messages[1].ok, false));
+    check(() => assert.equal(messages[1].error, 'BAD_ENVELOPE'));
 }
 console.log(`PASS core: ${checks} parameter, engine, cache and cleanup checks`);
