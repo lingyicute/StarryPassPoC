@@ -74,21 +74,32 @@ async function cachedResponse(request, navigation) {
         || (navigation && await matchCached(VERSION, APP_ROOT.href));
 }
 
+function cancelBody(response) {
+    if (response && response.body && typeof response.body.cancel === "function") {
+        response.body.cancel().catch(() => {});
+    }
+}
+
 function putInRuntimeCache(request, response, navigation) {
     if (response.status !== 200 || response.type === "opaque") return Promise.resolve();
     const key = isShellRequest(request) && (navigation || STATIC_URLS.has(request.url)) ? SHELL_URL : request.url;
     // 仅缓存明确列出的应用资源；不无限积累带查询参数的 URL 或意外缓存未来 API 的响应。
     if (!STATIC_URLS.has(key)) return Promise.resolve();
     const copy = response.clone();
-    return caches.open(RUNTIME).then((cache) => cache.put(key, copy));
+    return caches.open(RUNTIME).then((cache) => cache.put(key, copy)).catch((err) => {
+        cancelBody(copy);
+        throw err;
+    });
 }
 
 // 截止时间覆盖响应头及应用资源的完整正文，避免半开连接阻塞缓存兜底。
 async function fetchWithTimeout(request, navigation) {
     const controller = new AbortController();
-    let timer;
+    let timer, rawResponse = null, probeResponse = null;
     const timeout = new Promise((_, reject) => {
         timer = setTimeout(() => {
+            cancelBody(probeResponse);
+            cancelBody(rawResponse);
             reject(new Error("NETWORK_TIMEOUT"));
             controller.abort();
         }, NETWORK_TIMEOUT_MS);
@@ -96,20 +107,22 @@ async function fetchWithTimeout(request, navigation) {
     try {
         const transfer = Promise.resolve().then(async () => {
             const response = await fetch(request, { cache: "no-cache", signal: controller.signal });
+            rawResponse = response;
             try {
                 if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
                 if (response.status === 200 && response.type !== "opaque"
                         && (navigation || STATIC_URLS.has(request.url))) {
                     // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
                     // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
-                    await response.clone().arrayBuffer();
+                    probeResponse = response.clone();
+                    await probeResponse.arrayBuffer();
+                    probeResponse = null;
                     if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
                 }
                 return response;
             } catch (err) {
-                if (response && response.body && typeof response.body.cancel === "function") {
-                    response.body.cancel().catch(() => {});
-                }
+                cancelBody(probeResponse);
+                cancelBody(response);
                 throw err;
             }
         });
@@ -133,9 +146,7 @@ self.addEventListener("fetch", (event) => {
             if (response.status >= 500) {
                 const cached = await cachedResponse(request, navigation);
                 if (cached) {
-                    if (response.body && typeof response.body.cancel === "function") {
-                        response.body.cancel().catch(() => {});
-                    }
+                    cancelBody(response);
                     return cached;
                 }
             }
