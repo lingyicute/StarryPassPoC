@@ -998,7 +998,7 @@
                 }
                 if (tier === 'paranoid') bits += 3;
                 if (mode === 'pin') {
-                    if (bits < 44) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(Math.min(bits, outBits)) };
+                    if (bits < 44 || outBits <= 0) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(Math.min(bits, outBits)) };
                     // PIN 的安全性由终端限次决定，等级保持"中"，但比特数如实反映输出空间
                     return { level: 2, label: 'PIN · 依赖终端限次', bits: Math.round(Math.min(bits, outBits)) };
                 }
@@ -1029,7 +1029,7 @@
             var counterInput = document.getElementById('counter-input');
 
             var state = { length: 16, mode: 'full', counter: 1, tier: 'standard' };
-            var deriveId = 0, debounceTimer = null;
+            var deriveId = 0, debounceTimer = null, hasSession = false;
             var worker = null, localEngine = null, currentPayload = null;
             var pendingPayload = null, busy = false, watchdogTimer = null, workerAllowed = true;
 
@@ -1102,6 +1102,7 @@
             }
             document.getElementById('len-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-len]'); if (!btn || btn.disabled) return;
+                clampCounter();
                 var next = parseInt(btn.getAttribute('data-len'), 10);
                 if (next === state.length) return;
                 state.length = next;
@@ -1110,6 +1111,7 @@
             });
             document.getElementById('mode-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-mode]'); if (!btn) return;
+                clampCounter();
                 var next = btn.getAttribute('data-mode');
                 if (next === state.mode) return;
                 state.mode = next;
@@ -1119,14 +1121,21 @@
             });
             document.getElementById('tier-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-tier]'); if (!btn) return;
+                clampCounter();
                 var next = btn.getAttribute('data-tier');
                 if (next === state.tier) return;
                 state.tier = next;
                 setChipGroup(this, 'data-tier', state.tier);
                 scheduleRefresh();
             });
+            function parseCounter(raw) {
+                var s = String(raw === undefined || raw === null ? '' : raw).trim();
+                if (!s) return NaN;
+                var n = Number(s);
+                return Number.isFinite(n) ? Math.trunc(n) : parseInt(s, 10);
+            }
             function readCounter() {
-                return Math.max(1, Math.min(9999, parseInt(counterInput.value, 10) || 1));
+                return Math.max(1, Math.min(9999, parseCounter(counterInput.value) || 1));
             }
             function clampCounter() {
                 state.counter = readCounter();
@@ -1146,9 +1155,10 @@
             });
             counterInput.addEventListener('input', function () {
                 var prev = state.counter;
+                var raw = parseCounter(counterInput.value);
                 state.counter = readCounter();
                 // 超出上限的数字只会越敲越大，可以立即回写，避免显示值与实际生效值不一致。
-                if (parseInt(counterInput.value, 10) > 9999) counterInput.value = String(state.counter);
+                if (raw > 9999 || raw < 0) counterInput.value = String(state.counter);
                 if (state.counter !== prev) scheduleRefresh();
             });
             function commitCounter() {
@@ -1242,10 +1252,19 @@
                 worker = null;
                 currentPayload = null;
                 busy = false;
+                hasSession = false;
                 clearWatchdog();
                 if (target) {
                     target.onmessage = target.onerror = target.onmessageerror = null;
                     try { target.terminate(); } catch (err) {}
+                }
+            }
+
+            function wipeEngines() {
+                if (localEngine) localEngine.wipeSession();
+                if (worker && !busy && hasSession) {
+                    hasSession = false;
+                    try { worker.postMessage({ type: 'wipe' }); } catch (err) {}
                 }
             }
 
@@ -1254,6 +1273,7 @@
                 if (!isCurrent(payload)) return;
                 startWorker();
                 busy = true;
+                hasSession = true;
                 currentPayload = payload;
                 setBusy(true);
                 if (worker) {
@@ -1295,6 +1315,7 @@
                 var next = pendingPayload;
                 pendingPayload = null;
                 if (isCurrent(next)) { dispatch(next); return; }
+                if (masterInput.value === '' || codeInput.value.trim() === '') wipeEngines();
                 setBusy(!!debounceTimer);
             }
 
@@ -1350,8 +1371,10 @@
                 debounceTimer = null;
                 deriveId += 1;  // 输入/策略变化时立即作废，不能等 280 ms 防抖结束。
                 pendingPayload = null;
+                if (document.activeElement !== counterInput) clampCounter();
                 var master = masterInput.value, code = codeInput.value;
                 var hasInput = master !== '' && code.trim() !== '';
+                if (!hasInput) wipeEngines();
                 clearCodeBtn.hidden = code === '';
                 clearCodeBtn.disabled = code === '';
                 if (code === '') {
@@ -1364,15 +1387,16 @@
                 return hasInput;
             }
 
+            var masterComposing = false, codeComposing = false;
             function refresh() {
-                if (!invalidateResult(false)) return;
+                var composing = masterComposing || codeComposing;
+                if (!invalidateResult(composing) || composing) return;
                 requestDerive({
                     id: deriveId, type: 'derive', master: masterInput.value, code: codeInput.value,
                     tier: state.tier, counter: state.counter, length: effectiveLength(), mode: state.mode
                 });
             }
 
-            var masterComposing = false, codeComposing = false;
             function scheduleRefresh(e) {
                 var composing = !!(e && e.isComposing) || masterComposing || codeComposing;
                 if (invalidateResult(composing) && !composing) debounceTimer = setTimeout(refresh, 280);
@@ -1407,18 +1431,27 @@
             function fallbackCopy(text) {
                 var active = document.activeElement;
                 var ta = document.createElement('textarea');
-                ta.value = text; ta.setAttribute('readonly', '');
-                ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
-                document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
                 var ok = false;
-                try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-                ta.remove();
-                if (active && typeof active.focus === 'function') active.focus({ preventScroll: true });
-                return ok;
+                try {
+                    ta.value = text; ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+                    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+                    ok = document.execCommand('copy');
+                } catch (e) {
+                    ok = false;
+                } finally {
+                    ta.value = '';
+                    ta.remove();
+                    if (active && typeof active.focus === 'function') {
+                        try { active.focus({ preventScroll: true }); } catch (e) {}
+                    }
+                }
+                return !!ok;
             }
             var copyResetTimer = null;
             copyBtn.addEventListener('click', function () {
                 if (copyBtn.disabled) return;
+                clampCounter();
                 var text = output.textContent, copiedId = deriveId;
                 function isStillValid() {
                     return copiedId === deriveId && !copyBtn.disabled && output.textContent === text;
@@ -1457,7 +1490,8 @@
                 wipe(); refresh(); masterInput.focus();
             });
             clearCodeBtn.addEventListener('click', function () {
-                codeInput.value = ''; clampCounter(); refresh(); codeInput.focus();
+                codeInput.value = ''; codeComposing = false;
+                clampCounter(); refresh(); codeInput.focus();
             });
             window.addEventListener('pagehide', function () {
                 document.querySelectorAll('.ripple-wave').forEach(function (w) { w.remove(); });
