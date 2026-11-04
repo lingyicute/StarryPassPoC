@@ -171,11 +171,26 @@ async function checkText(e, expected) {
         fetchImpl = async () => new Response('DYNAMIC');
     }
 
+    let quotaCopyCanceled = false;
     putError = new Error('quota exceeded');
-    fetchImpl = async () => new Response('ONLINE WITHOUT CACHE');
+    fetchImpl = async () => {
+        const resp = new Response('ONLINE WITHOUT CACHE');
+        const nativeClone = resp.clone.bind(resp);
+        let calls = 0;
+        resp.clone = () => {
+            calls++;
+            const copy = nativeClone();
+            if (calls === 2) {
+                Object.defineProperty(copy, 'body', { value: { cancel: async () => { quotaCopyCanceled = true; } } });
+            }
+            return copy;
+        };
+        return resp;
+    };
     const quota = event('fetch', req());
     await checkText(quota, 'ONLINE WITHOUT CACHE'); await finish(quota);
     putError = null;
+    check(() => assert.equal(quotaCopyCanceled, true, 'failed runtime cache put cancels cloned response body'));
     check(() => assert.equal(timers.size, 0, 'completed transfers clear deadlines'));
 
     // 连响应头都不返回，且忽略 abort：respondWith 与 waitUntil 仍必须及时结束。
@@ -222,6 +237,26 @@ async function checkText(e, expected) {
         expireNetwork();
         await checkText(partial, expected); await finish(partial);
         check(() => assert.equal(bodySignal.aborted, true));
+    }
+
+    // 即使正文流完全忽略 abort，超时也必须立即取消探测分支与原始响应流。
+    {
+        let rawCanceled = false, probeCanceled = false;
+        fetchImpl = async () => {
+            const resp = new Response('STALLED BODY');
+            Object.defineProperty(resp, 'body', { value: { cancel: async () => { rawCanceled = true; } } });
+            resp.clone = () => ({
+                arrayBuffer: () => new Promise(() => {}),
+                body: { cancel: async () => { probeCanceled = true; } }
+            });
+            return resp;
+        };
+        const hungBody = event('fetch', req());
+        await tick();
+        expireNetwork();
+        await checkText(hungBody, 'NEW SHELL'); await finish(hungBody);
+        check(() => assert.equal(rawCanceled, true, 'timeout cancels raw response when body stream ignores abort'));
+        check(() => assert.equal(probeCanceled, true, 'timeout cancels probe clone when body stream ignores abort'));
     }
 
     // 无缓存时返回网络错误，不能留下永不 settle 的响应或后台写入。
