@@ -99,73 +99,81 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         var bitLenLo = (len << 3) | 0;
         var padLen = (len + 9 + 63) & ~63;
         var padded = new Uint8Array(padLen);
-        padded.set(msg);
-        padded[len] = 0x80;
-        padded[padLen - 8] = (bitLenHi >>> 24) & 0xff;
-        padded[padLen - 7] = (bitLenHi >>> 16) & 0xff;
-        padded[padLen - 6] = (bitLenHi >>> 8) & 0xff;
-        padded[padLen - 5] = bitLenHi & 0xff;
-        padded[padLen - 4] = (bitLenLo >>> 24) & 0xff;
-        padded[padLen - 3] = (bitLenLo >>> 16) & 0xff;
-        padded[padLen - 2] = (bitLenLo >>> 8) & 0xff;
-        padded[padLen - 1] = bitLenLo & 0xff;
+        try {
+            padded.set(msg);
+            padded[len] = 0x80;
+            padded[padLen - 8] = (bitLenHi >>> 24) & 0xff;
+            padded[padLen - 7] = (bitLenHi >>> 16) & 0xff;
+            padded[padLen - 6] = (bitLenHi >>> 8) & 0xff;
+            padded[padLen - 5] = bitLenHi & 0xff;
+            padded[padLen - 4] = (bitLenLo >>> 24) & 0xff;
+            padded[padLen - 3] = (bitLenLo >>> 16) & 0xff;
+            padded[padLen - 2] = (bitLenLo >>> 8) & 0xff;
+            padded[padLen - 1] = bitLenLo & 0xff;
 
-        for (var off = 0; off < padLen; off += 64) {
-            for (var i = 0; i < 16; i++) {
-                var bi = off + (i << 2);
-                SHA256_W[i] = ((padded[bi] << 24) | (padded[bi + 1] << 16) | (padded[bi + 2] << 8) | padded[bi + 3]) | 0;
+            for (var off = 0; off < padLen; off += 64) {
+                for (var i = 0; i < 16; i++) {
+                    var bi = off + (i << 2);
+                    SHA256_W[i] = ((padded[bi] << 24) | (padded[bi + 1] << 16) | (padded[bi + 2] << 8) | padded[bi + 3]) | 0;
+                }
+                for (var j = 16; j < 64; j++) {
+                    var w15 = SHA256_W[j - 15], w2 = SHA256_W[j - 2];
+                    var s0 = ((w15 >>> 7) | (w15 << 25)) ^ ((w15 >>> 18) | (w15 << 14)) ^ (w15 >>> 3);
+                    var s1 = ((w2 >>> 17) | (w2 << 15)) ^ ((w2 >>> 19) | (w2 << 13)) ^ (w2 >>> 10);
+                    SHA256_W[j] = (SHA256_W[j - 16] + s0 + SHA256_W[j - 7] + s1) | 0;
+                }
+                var a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+                for (var r = 0; r < 64; r++) {
+                    var S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+                    var ch = (e & f) ^ (~e & g);
+                    var t1 = (h + S1 + ch + SHA256_K[r] + SHA256_W[r]) | 0;
+                    var S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+                    var maj = (a & b) ^ (a & c) ^ (b & c);
+                    var t2 = (S0 + maj) | 0;
+                    h = g; g = f; f = e; e = (d + t1) | 0;
+                    d = c; c = b; b = a; a = (t1 + t2) | 0;
+                }
+                h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
+                h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
             }
-            for (var j = 16; j < 64; j++) {
-                var w15 = SHA256_W[j - 15], w2 = SHA256_W[j - 2];
-                var s0 = ((w15 >>> 7) | (w15 << 25)) ^ ((w15 >>> 18) | (w15 << 14)) ^ (w15 >>> 3);
-                var s1 = ((w2 >>> 17) | (w2 << 15)) ^ ((w2 >>> 19) | (w2 << 13)) ^ (w2 >>> 10);
-                SHA256_W[j] = (SHA256_W[j - 16] + s0 + SHA256_W[j - 7] + s1) | 0;
+            var out = new Uint8Array(32);
+            var hs = [h0, h1, h2, h3, h4, h5, h6, h7];
+            for (var k = 0; k < 8; k++) {
+                out[k * 4]     = (hs[k] >>> 24) & 0xff;
+                out[k * 4 + 1] = (hs[k] >>> 16) & 0xff;
+                out[k * 4 + 2] = (hs[k] >>> 8) & 0xff;
+                out[k * 4 + 3] = hs[k] & 0xff;
             }
-            var a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
-            for (var r = 0; r < 64; r++) {
-                var S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
-                var ch = (e & f) ^ (~e & g);
-                var t1 = (h + S1 + ch + SHA256_K[r] + SHA256_W[r]) | 0;
-                var S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
-                var maj = (a & b) ^ (a & c) ^ (b & c);
-                var t2 = (S0 + maj) | 0;
-                h = g; g = f; f = e; e = (d + t1) | 0;
-                d = c; c = b; b = a; a = (t1 + t2) | 0;
-            }
-            h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
-            h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
+            return out;
+        } finally {
+            zeroize(padded);
+            zeroize(SHA256_W);
         }
-        zeroize(padded);
-        zeroize(SHA256_W);
-        var out = new Uint8Array(32);
-        var hs = [h0, h1, h2, h3, h4, h5, h6, h7];
-        for (var k = 0; k < 8; k++) {
-            out[k * 4]     = (hs[k] >>> 24) & 0xff;
-            out[k * 4 + 1] = (hs[k] >>> 16) & 0xff;
-            out[k * 4 + 2] = (hs[k] >>> 8) & 0xff;
-            out[k * 4 + 3] = hs[k] & 0xff;
-        }
-        return out;
     }
 
     function hmacSha256(key, data) {
-        var k = key.length > 64 ? sha256(key) : key;
-        var ipad = new Uint8Array(64 + data.length);
-        var opad = new Uint8Array(64 + 32);
-        for (var i = 0; i < 64; i++) {
-            var b = i < k.length ? k[i] : 0;
-            ipad[i] = b ^ 0x36;
-            opad[i] = b ^ 0x5c;
+        var k = null, ipad = null, opad = null, inner = null;
+        try {
+            k = key.length > 64 ? sha256(key) : key;
+            ipad = new Uint8Array(64 + data.length);
+            opad = new Uint8Array(64 + 32);
+            for (var i = 0; i < 64; i++) {
+                var b = i < k.length ? k[i] : 0;
+                ipad[i] = b ^ 0x36;
+                opad[i] = b ^ 0x5c;
+            }
+            ipad.set(data, 64);
+            inner = sha256(ipad);
+            zeroize(ipad);
+            opad.set(inner, 64);
+            zeroize(inner);
+            return sha256(opad);
+        } finally {
+            zeroize(ipad);
+            zeroize(inner);
+            zeroize(opad);
+            if (k && k !== key) zeroize(k);
         }
-        ipad.set(data, 64);
-        var inner = sha256(ipad);
-        zeroize(ipad);
-        opad.set(inner, 64);
-        zeroize(inner);
-        var mac = sha256(opad);
-        zeroize(opad);
-        if (k !== key) zeroize(k);
-        return mac;
     }
 
     /* ---------- BLAKE2b (RFC 7693) ---------- */
@@ -230,50 +238,61 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         outlen = outlen || 64;
         var keylen = key ? key.length : 0;
         var h = new Int32Array(BLAKE2B_IV);
-        h[0] ^= 0x01010000 ^ (keylen << 8) ^ outlen;
         var buf = new Uint8Array(128), buflen = 0, tLo = 0, tHi = 0;
         function addCount(inc) { var s = (tLo >>> 0) + inc; tLo = s | 0; if (s > 0xffffffff) tHi = (tHi + 1) | 0; }
-        if (keylen > 0) { buf.set(key); buflen = 128; }
-        var pos = 0, len = input.length;
-        if (len > 0) {
-            if (buflen > 0 && buflen + len > 128) {
-                var fill = 128 - buflen;
-                buf.set(input.subarray(0, fill), buflen);
-                addCount(128); b2bCompress(h, buf, 0, tLo, tHi, false);
-                buflen = 0; pos = fill;
+        try {
+            h[0] ^= 0x01010000 ^ (keylen << 8) ^ outlen;
+            if (keylen > 0) { buf.set(key); buflen = 128; }
+            var pos = 0, len = input.length;
+            if (len > 0) {
+                if (buflen > 0 && buflen + len > 128) {
+                    var fill = 128 - buflen;
+                    buf.set(input.subarray(0, fill), buflen);
+                    addCount(128); b2bCompress(h, buf, 0, tLo, tHi, false);
+                    buflen = 0; pos = fill;
+                }
+                while (pos + 128 < len) {
+                    addCount(128); b2bCompress(h, input, pos, tLo, tHi, false);
+                    pos += 128;
+                }
+                buf.set(input.subarray(pos, len), buflen);
+                buflen += (len - pos);
             }
-            while (pos + 128 < len) {
-                addCount(128); b2bCompress(h, input, pos, tLo, tHi, false);
-                pos += 128;
-            }
-            buf.set(input.subarray(pos, len), buflen);
-            buflen += (len - pos);
+            for (var k = buflen; k < 128; k++) buf[k] = 0;
+            addCount(buflen); b2bCompress(h, buf, 0, tLo, tHi, true);
+            var out = new Uint8Array(outlen);
+            for (var i = 0; i < outlen; i++) out[i] = (h[i >> 2] >>> ((i & 3) << 3)) & 0xff;
+            return out;
+        } finally {
+            zeroize(buf); zeroize(h); zeroize(B2B_V); zeroize(B2B_M);
         }
-        for (var k = buflen; k < 128; k++) buf[k] = 0;
-        addCount(buflen); b2bCompress(h, buf, 0, tLo, tHi, true);
-        var out = new Uint8Array(outlen);
-        for (var i = 0; i < outlen; i++) out[i] = (h[i >> 2] >>> ((i & 3) << 3)) & 0xff;
-        zeroize(buf); zeroize(h); zeroize(B2B_V); zeroize(B2B_M);
-        return out;
     }
 
     /* ---------- Argon2id v1.3 (RFC 9106) ---------- */
     function argon2HashPrime(input, tagLen) {
-        var msg = new Uint8Array(4 + input.length);
-        writeLE32(msg, 0, tagLen);
-        msg.set(input, 4);
-        if (tagLen <= 64) { var res = blake2b(msg, tagLen); zeroize(msg); return res; }
-        var out = new Uint8Array(tagLen);
-        var V = blake2b(msg, 64); zeroize(msg);
-        out.set(V.subarray(0, 32), 0);
-        var r = Math.ceil(tagLen / 32) - 2, pos = 32;
-        for (var i = 1; i < r; i++) {
-            var nextV = blake2b(V, 64); zeroize(V); V = nextV;
-            out.set(V.subarray(0, 32), pos); pos += 32;
+        var msg = null, out = null, V = null, finalV = null;
+        try {
+            msg = new Uint8Array(4 + input.length);
+            writeLE32(msg, 0, tagLen);
+            msg.set(input, 4);
+            if (tagLen <= 64) return blake2b(msg, tagLen);
+            out = new Uint8Array(tagLen);
+            V = blake2b(msg, 64); zeroize(msg);
+            out.set(V.subarray(0, 32), 0);
+            var r = Math.ceil(tagLen / 32) - 2, pos = 32;
+            for (var i = 1; i < r; i++) {
+                var nextV = blake2b(V, 64); zeroize(V); V = nextV;
+                out.set(V.subarray(0, 32), pos); pos += 32;
+            }
+            finalV = blake2b(V, tagLen - 32 * r);
+            out.set(finalV, pos);
+            return out;
+        } catch (err) {
+            zeroize(out);
+            throw err;
+        } finally {
+            zeroize(msg); zeroize(V); zeroize(finalV);
         }
-        var finalV = blake2b(V, tagLen - 32 * r); zeroize(V);
-        out.set(finalV, pos); zeroize(finalV);
-        return out;
     }
 
     function mulHi32(a, b) {
@@ -820,7 +839,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         if (cachedTag) { zeroize(cachedTag); cachedTag = null; }
         if (cachedSk)  { zeroize(cachedSk);  cachedSk  = null; }
         if (sessionNonce) { zeroize(sessionNonce); sessionNonce = null; }
-        zeroize(JS_R); zeroize(JS_Z);
+        zeroize(SHA256_W); zeroize(B2B_V); zeroize(B2B_M); zeroize(JS_R); zeroize(JS_Z);
         if (wasmState && wasmState.mem) {
             new Uint8Array(wasmState.mem.buffer).fill(0);
         }
@@ -853,9 +872,27 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
     }
 
+    function clampParam(val, min, max, fallback) {
+        if (val === undefined || val === null || typeof val === 'boolean') return fallback;
+        var n;
+        if (typeof val === 'number') {
+            n = Number.isFinite(val) ? Math.trunc(val) : NaN;
+        } else {
+            var s = String(val).trim();
+            if (!s) return fallback;
+            var num = Number(s);
+            n = Number.isFinite(num) ? Math.trunc(num) : parseInt(s, 10);
+        }
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+    }
+
     function canonicalizeInputs(req) {
         if (!req || typeof req !== 'object') throw new Error('INVALID_REQUEST');
-        if (typeof req.master === 'symbol' || typeof req.code === 'symbol') throw new TypeError('INVALID_INPUT');
+        if (typeof req.master === 'symbol' || typeof req.code === 'symbol'
+                || typeof req.counter === 'symbol' || typeof req.length === 'symbol') {
+            throw new TypeError('INVALID_INPUT');
+        }
         // 保留省略参数时的原有默认值，但显式未知值不能静默降级。
         var tier = req.tier === undefined ? 'standard' : req.tier;
         var mode = req.mode === undefined ? 'full' : req.mode;
@@ -864,8 +901,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         var masterNorm = String(req.master || '').normalize('NFC');
         var codeNorm   = String(req.code || '').trim().normalize('NFC');
         var tierSpec = TIERS[tier];
-        var counter = Math.max(1, Math.min(9999, parseInt(req.counter, 10) || 1));
-        var length  = Math.max(4, Math.min(64, parseInt(req.length, 10) || 16));
+        var counter = clampParam(req.counter, 1, 9999, 1);
+        var length  = clampParam(req.length, 4, 64, 16);
         var masterBytes, codeBytes;
         try {
             masterBytes = encoder.encode(masterNorm);
@@ -931,14 +968,21 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     if (workerGlobal && typeof workerGlobal.postMessage === 'function') {
         workerGlobal.onmessage = function (ev) {
-            var data = (ev && ev.data) || {};
-            var id = data.id;
-            if (data.type === 'wipe') {
+            var data, id, type;
+            try {
+                data = (ev && ev.data) || {};
+                id = data.id;
+                type = data.type;
+            } catch (err) {
+                workerGlobal.postMessage({ id: id, ok: false, error: err && err.message ? err.message : 'DERIVE_ERROR' });
+                return;
+            }
+            if (type === 'wipe') {
                 wipeSession();
                 workerGlobal.postMessage({ id: id, type: 'wiped' });
                 return;
             }
-            if (data.type === 'derive') {
+            if (type === 'derive') {
                 try {
                     var res = deriveSync(data);
                     workerGlobal.postMessage({ id: id, ok: true, password: res.password, cached: res.cached });
