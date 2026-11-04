@@ -188,6 +188,8 @@ async def test_queue(browser, url):
         await reply(page, (await requests(page))[-1])
         await page.fill('#master-input', '')
         check(not await page.is_enabled('#copy-btn'), 'manual clear invalidates immediately')
+        check(await page.evaluate("__workers.at(-1).messages.some(m => m.type === 'wipe')"),
+              'manual clear wipes cached Worker session key')
         await page.clock.run_for(300)
         check(await page.inner_text('#password-output') == '请填写完整的主密码和代号', 'manual clear stays empty')
     finally:
