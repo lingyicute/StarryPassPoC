@@ -148,7 +148,8 @@ async def test_queue(browser, url):
             input.value = 'ime-raw';
             input.dispatchEvent(new InputEvent('input', {bubbles: true, isComposing: true}));
         }""")
-        await page.click('#ctr-inc')
+        # 真实点击会让代号框失焦并结束组合态；这里用合成点击保持焦点，模拟组合期间的策略变更。
+        await page.dispatch_event('#ctr-inc', 'click')
         check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar'),
               'IME composition immediately invalidates previous output without stuck busy bar')
         await page.clock.run_for(300)
