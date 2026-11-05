@@ -123,7 +123,9 @@ for (const tier of ['bogus', '__proto__', 'constructor', null, ['standard']]) ch
     () => cachedCore.deriveSync({ ...request, tier }), /INVALID_TIER/));
 for (const mode of ['bogus', '__proto__', 'constructor', null, ['full']]) check(() => assert.throws(
     () => cachedCore.deriveSync({ ...request, mode }), /INVALID_MODE/));
-check(() => assert.throws(() => cachedCore.deriveSync(null), /INVALID_REQUEST/));
+for (const badReq of [null, undefined, 123, 'raw-string', true]) {
+    check(() => assert.throws(() => cachedCore.deriveSync(badReq), (err) => err instanceof TypeError && err.message === 'INVALID_REQUEST'));
+}
 check(() => assert.throws(() => cachedCore.deriveSync({ ...request, master: Symbol('m') }), TypeError));
 check(() => assert.throws(() => cachedCore.deriveSync({ ...request, code: Symbol('c') }), TypeError));
 check(() => assert.throws(() => cachedCore.deriveSync({ ...request, counter: Symbol('n') }), TypeError));
@@ -170,9 +172,14 @@ check(() => assert.equal(
     worker.onmessage({ data: deriveEnv });
     check(() => assert.equal(messages[0].id, 101));
     check(() => assert.equal(messages[0].ok, true));
-    worker.onmessage({ data: { id: 102, get type() { throw new Error('BAD_ENVELOPE'); } } });
+    const wipeEnv = { id: 102, type: 'wipe' };
+    worker.onmessage({ data: wipeEnv });
+    wipeEnv.id = 998;
     check(() => assert.equal(messages[1].id, 102));
-    check(() => assert.equal(messages[1].ok, false));
-    check(() => assert.equal(messages[1].error, 'BAD_ENVELOPE'));
+    check(() => assert.equal(messages[1].type, 'wiped'));
+    worker.onmessage({ data: { id: 103, get type() { throw new Error('BAD_ENVELOPE'); } } });
+    check(() => assert.equal(messages[2].id, 103));
+    check(() => assert.equal(messages[2].ok, false));
+    check(() => assert.equal(messages[2].error, 'BAD_ENVELOPE'));
 }
 console.log(`PASS core: ${checks} parameter, engine, cache and cleanup checks`);

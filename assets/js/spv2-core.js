@@ -896,7 +896,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function canonicalizeInputs(req) {
-        if (!req || typeof req !== 'object') throw new Error('INVALID_REQUEST');
+        if (!req || typeof req !== 'object') throw new TypeError('INVALID_REQUEST');
         if (typeof req.master === 'symbol' || typeof req.code === 'symbol'
                 || typeof req.counter === 'symbol' || typeof req.length === 'symbol') {
             throw new TypeError('INVALID_INPUT');
