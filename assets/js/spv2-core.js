@@ -550,7 +550,11 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         try {
             writeLE32(headerFixed, 0, p); writeLE32(headerFixed, 4, T); writeLE32(headerFixed, 8, m);
             writeLE32(headerFixed, 12, t); writeLE32(headerFixed, 16, version); writeLE32(headerFixed, 20, yType);
-            fields = [headerFixed, lenPrefixed(P), lenPrefixed(S), lenPrefixed(K), lenPrefixed(X)];
+            fields = [headerFixed];
+            fields.push(lenPrefixed(P));
+            fields.push(lenPrefixed(S));
+            fields.push(lenPrefixed(K));
+            fields.push(lenPrefixed(X));
             h0Input = concatBytes(fields);
             H0 = blake2b(h0Input, 64);
             zeroize(h0Input);
@@ -715,15 +719,18 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     blockIdx++;
                     if (blockIdx > 255) throw new Error('HKDF_EXHAUSTED');
                     var inBlk = new Uint8Array(prev.length + info.length + 1);
-                    inBlk.set(prev, 0);
-                    inBlk.set(info, prev.length);
-                    inBlk[prev.length + info.length] = blockIdx;
-                    var next = hmacSha256(prk, inBlk);
-                    zeroize(inBlk);
-                    zeroize(prev);
-                    prev = next;
-                    streamBuf.set(prev);
-                    streamPos = 0;
+                    try {
+                        inBlk.set(prev, 0);
+                        inBlk.set(info, prev.length);
+                        inBlk[prev.length + info.length] = blockIdx;
+                        var next = hmacSha256(prk, inBlk);
+                        zeroize(prev);
+                        prev = next;
+                        streamBuf.set(prev);
+                        streamPos = 0;
+                    } finally {
+                        zeroize(inBlk);
+                    }
                 }
                 return streamBuf[streamPos++];
             }
@@ -880,10 +887,11 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         } else {
             var s = String(val).trim();
             if (!s) return fallback;
-            var num = Number(s);
-            n = Number.isFinite(num) ? Math.trunc(num) : parseInt(s, 10);
+            var num = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(s) ? Number(s) : parseInt(s, 10);
+            if (Number.isNaN(num)) return fallback;
+            n = Number.isFinite(num) ? Math.trunc(num) : num;
         }
-        if (!Number.isFinite(n)) return fallback;
+        if (Number.isNaN(n)) return fallback;
         return Math.max(min, Math.min(max, n));
     }
 
