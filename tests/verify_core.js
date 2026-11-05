@@ -132,10 +132,18 @@ check(() => assert.equal(cachedCore.deriveSync({ ...request, length: 0 }).passwo
 check(() => assert.equal(cachedCore.deriveSync({ ...request, length: '0' }).password.length, 4));
 check(() => assert.equal(cachedCore.deriveSync({ ...request, length: 1e21 }).password.length, 64));
 check(() => assert.equal(cachedCore.deriveSync({ ...request, length: '1e2' }).password.length, 64));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: '1e500' }).password.length, 64));
+check(() => assert.equal(cachedCore.deriveSync({ ...request, length: '-1e500' }).password.length, 4));
 check(() => assert.equal(cachedCore.deriveSync({ ...request, length: 9e-7 }).password.length, 4));
 check(() => assert.equal(
     cachedCore.deriveSync({ ...request, counter: '1e5' }).password,
     cachedCore.deriveSync({ ...request, counter: 9999 }).password));
+check(() => assert.equal(
+    cachedCore.deriveSync({ ...request, counter: '1e500' }).password,
+    cachedCore.deriveSync({ ...request, counter: 9999 }).password));
+check(() => assert.equal(
+    cachedCore.deriveSync({ ...request, counter: '-1e500' }).password,
+    cachedCore.deriveSync({ ...request, counter: 1 }).password));
 check(() => assert.equal(
     cachedCore.deriveSync({ ...request, counter: 5e-7 }).password,
     cachedCore.deriveSync({ ...request, counter: 1 }).password));
