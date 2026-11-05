@@ -1102,18 +1102,26 @@
             }
             document.getElementById('len-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-len]'); if (!btn || btn.disabled) return;
+                var prevCounter = state.counter;
                 clampCounter();
                 var next = parseInt(btn.getAttribute('data-len'), 10);
-                if (next === state.length) return;
+                if (next === state.length) {
+                    if (state.counter !== prevCounter) scheduleRefresh();
+                    return;
+                }
                 state.length = next;
                 syncLengthChips();
                 scheduleRefresh();
             });
             document.getElementById('mode-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-mode]'); if (!btn) return;
+                var prevCounter = state.counter;
                 clampCounter();
                 var next = btn.getAttribute('data-mode');
-                if (next === state.mode) return;
+                if (next === state.mode) {
+                    if (state.counter !== prevCounter) scheduleRefresh();
+                    return;
+                }
                 state.mode = next;
                 setChipGroup(this, 'data-mode', state.mode);
                 syncLengthChips();
@@ -1121,9 +1129,13 @@
             });
             document.getElementById('tier-chips').addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-tier]'); if (!btn) return;
+                var prevCounter = state.counter;
                 clampCounter();
                 var next = btn.getAttribute('data-tier');
-                if (next === state.tier) return;
+                if (next === state.tier) {
+                    if (state.counter !== prevCounter) scheduleRefresh();
+                    return;
+                }
                 state.tier = next;
                 setChipGroup(this, 'data-tier', state.tier);
                 scheduleRefresh();
@@ -1131,11 +1143,12 @@
             function parseCounter(raw) {
                 var s = String(raw === undefined || raw === null ? '' : raw).trim();
                 if (!s) return NaN;
-                var n = Number(s);
-                return Number.isFinite(n) ? Math.trunc(n) : parseInt(s, 10);
+                var n = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(s) ? Number(s) : parseInt(s, 10);
+                return Number.isFinite(n) ? Math.trunc(n) : n;
             }
             function readCounter() {
-                return Math.max(1, Math.min(9999, parseCounter(counterInput.value) || 1));
+                var n = parseCounter(counterInput.value);
+                return Math.max(1, Math.min(9999, Number.isNaN(n) ? 1 : (n || 1)));
             }
             function clampCounter() {
                 state.counter = readCounter();
@@ -1261,9 +1274,10 @@
             }
 
             function wipeEngines() {
+                if (busy || !hasSession) return;
+                hasSession = false;
                 if (localEngine) localEngine.wipeSession();
-                if (worker && !busy && hasSession) {
-                    hasSession = false;
+                if (worker) {
                     try { worker.postMessage({ type: 'wipe' }); } catch (err) {}
                 }
             }
@@ -1451,7 +1465,9 @@
             var copyResetTimer = null;
             copyBtn.addEventListener('click', function () {
                 if (copyBtn.disabled) return;
+                var prevCounter = state.counter;
                 clampCounter();
+                if (state.counter !== prevCounter) { scheduleRefresh(); return; }
                 var text = output.textContent, copiedId = deriveId;
                 function isStillValid() {
                     return copiedId === deriveId && !copyBtn.disabled && output.textContent === text;
@@ -1478,6 +1494,7 @@
                 clearTimeout(debounceTimer); debounceTimer = null;
                 pendingPayload = null;
                 stopWorker();
+                hasSession = false;
                 if (localEngine) localEngine.wipeSession();
                 clearTimeout(snackbarTimer);
                 snackbar.classList.remove('is-visible');
