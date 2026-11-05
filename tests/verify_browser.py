@@ -186,6 +186,10 @@ async def test_queue(browser, url):
               and (await requests(page))[-1]['counter'] == 9998,
               'blur without compositionend ends composition and resumes derivation')
         await reply(page, (await requests(page))[-1])
+        await page.fill('#counter-input', '1e2'); await page.clock.run_for(300)
+        check((await requests(page))[-1]['counter'] == 100,
+              'number input exponent notation uses its numeric value, not a parseInt prefix')
+        await reply(page, (await requests(page))[-1])
         await page.click('#visibility-btn')
         check(await page.get_attribute('#master-input', 'type') == 'text', 'visibility toggle reveals master input')
         await page.evaluate("""() => {
