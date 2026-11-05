@@ -126,7 +126,7 @@ async function fetchWithTimeout(request, navigation) {
                 throw err;
             }
         });
-        // 即使底层实现未响应 abort，截止时间也必须结束 respondWith / waitUntil。
+        // 即使传输未响应 abort，也结束网络阶段；缓存自身的 I/O 不受此截止时间约束。
         return await Promise.race([transfer, timeout]);
     } finally {
         clearTimeout(timer);

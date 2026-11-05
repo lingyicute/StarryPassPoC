@@ -16,6 +16,8 @@ import time
 
 from playwright.async_api import async_playwright
 
+from verify_network_timeout import run_network_timeout_checks
+
 ROOT = Path(__file__).resolve().parents[1]
 BASE_PASSWORD = 'WueNKY^SRHRh4!DL'
 FAKE_PASSWORD = 'LatestResult1!Ab'
@@ -108,6 +110,10 @@ async def test_queue(browser, url):
         await reply(page, second)
         await reply(page, third)
         check(await page.inner_text('#password-output') == FAKE_PASSWORD, 'duplicate old reply cannot discard current result')
+        await page.fill('#code-input', 'malformed-result'); await page.clock.run_for(300)
+        malformed = (await requests(page))[-1]
+        await page.evaluate('id => __workers[0].reply({id, ok: true, password: null})', malformed['id'])
+        check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar'), 'malformed success is fail-closed without stuck spinner')
         await page.click('#mode-chips [data-mode=pin]')
         check(not await page.is_enabled('#copy-btn'), 'strategy change immediately invalidates output')
         await page.clock.run_for(300)
@@ -381,10 +387,10 @@ async def test_malformed_results(browser, url):
     context = await browser.new_context(ignore_https_errors=True, service_workers='block')
     await context.route('**/assets/js/spv2-core.js', lambda route: route.fulfill(
         content_type='text/javascript', body="""
-        window.__localResult=null;
+        window.__localResult=null;window.__localWipes=0;
         window.spv2CoreFactory=()=>({
             deriveSync(){return typeof __localResult==='function'?__localResult():__localResult;},
-            wipeSession(){}
+            wipeSession(){__localWipes++;}
         });"""))
     page = await context.new_page(); await page.clock.install()
     await page.add_init_script("window.Worker=class{constructor(){throw new Error('blocked')}}")
@@ -404,6 +410,8 @@ async def test_malformed_results(browser, url):
         await fill(page, code='valid-after-local-error'); await page.clock.run_for(300)
         check(await page.is_enabled('#copy-btn') and await page.inner_text('#password-output') == FAKE_PASSWORD,
               'valid local result recovers after malformed completions')
+        await page.fill('#master-input', '')
+        check(await page.evaluate('__localWipes') > 0, 'manual clear wipes local engine session key')
         check(errors == [], 'malformed local results cause no unhandled page exception')
     finally:
         await context.close()
@@ -467,6 +475,7 @@ async def test_real_crypto(browser, url):
         await fill(page); await ready(page)
         check(await page.inner_text('#password-output') == BASE_PASSWORD, 'real Worker baseline vector')
         check(await worker.evaluate('__wasmCompiled') > 0, 'real Worker actually compiles WASM')
+        check(await page.get_attribute('#master-input', 'autocomplete') == 'off', 'production autocomplete policy unchanged')
         # 修改输入本身不应发起网络请求；初次加载/安装 PWA 的静态请求不算派生请求。
         await poll(lambda: page.evaluate('!!navigator.serviceWorker.controller'))
         network = []
@@ -679,6 +688,7 @@ async def main():
                     await test_service_worker(browser, url, site, state)
                     await test_service_worker_read_failure(browser, url)
                     await test_tap_feedback_and_keyboard_focus(browser, url)
+                    await run_network_timeout_checks(browser, check)
                 finally:
                     await browser.close()
         finally:
