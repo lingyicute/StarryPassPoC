@@ -170,6 +170,22 @@ async def test_queue(browser, url):
         }""")
         check(await page.input_value('#counter-input') == '9999', 'counter blur normalizes raw text even without change event')
         await reply(page, (await requests(page))[-1])
+        before_blur_count = len(await requests(page))
+        await page.focus('#code-input')
+        await page.evaluate("""() => {
+            const input = document.getElementById('code-input');
+            input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}));
+            input.value = 'ime-blur';
+            input.dispatchEvent(new InputEvent('input', {bubbles: true, isComposing: true}));
+        }""")
+        await page.clock.run_for(300)
+        check(len(await requests(page)) == before_blur_count, 'IME composition holds KDF while the field keeps focus')
+        await page.click('#ctr-dec')
+        await page.clock.run_for(300)
+        check(len(await requests(page)) == before_blur_count + 1 and (await requests(page))[-1]['code'] == 'ime-blur'
+              and (await requests(page))[-1]['counter'] == 9998,
+              'blur without compositionend ends composition and resumes derivation')
+        await reply(page, (await requests(page))[-1])
         await page.click('#visibility-btn')
         check(await page.get_attribute('#master-input', 'type') == 'text', 'visibility toggle reveals master input')
         await page.evaluate("""() => {
