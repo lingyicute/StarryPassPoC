@@ -96,6 +96,10 @@ assert.equal(estimate(binding, 'unique-site-code', 'paranoid').bits,
 assert.equal(estimate(long, 'unique-site-code', 'paranoid').bits, standard.bits, 'tier bonus must not exceed the output cap');
 assert.equal(estimate(long, 'unique-site-code', 'standard', 'pin', 8).label, 'PIN · 依赖终端限次');
 assert.equal(estimate('X9!', 'unique-site-code', 'standard', 'pin', 8).label, '弱 · 主密码过短');
+for (const badLen of [0, -4, NaN, Infinity]) {
+    assert.deepEqual(estimate(long, 'unique-site-code', 'standard', 'pin', badLen),
+        { level: 1, label: '弱 · 主密码过短', bits: 0 });
+}
 assert.deepEqual(estimate('Cafe\u0301 long random phrase 82!'), estimate('Café long random phrase 82!'));
 // Weak roots must not be promoted by tier, output mode, or output length.
 for (const tier of ['standard', 'paranoid']) {
