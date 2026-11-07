@@ -721,6 +721,9 @@
     </style>
 </head>
 <body>
+    <noscript>
+        <p class="noscript-notice" style="margin:16px;padding:12px 16px;border-radius:12px;background:var(--md-sys-color-error-container);color:var(--md-sys-color-error);font-weight:500">星愿令需要启用 JavaScript 才能在本机派生密码；不会向任何服务器发送数据。</p>
+    </noscript>
 
     <header class="app-bar">
         <div class="app-bar__logo" aria-hidden="true">
@@ -828,7 +831,7 @@
                 <div class="derive-bar" id="derive-bar" hidden></div>
 
                 <div class="result__actions">
-                    <div class="strength" id="strength" data-level="0" aria-label="密码强度">
+                    <div class="strength" id="strength" data-level="0" role="group" aria-label="密码强度">
                         <div class="strength__bars" aria-hidden="true">
                             <span class="strength__bar"></span>
                             <span class="strength__bar"></span>
