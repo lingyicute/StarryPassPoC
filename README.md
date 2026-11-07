@@ -1,5 +1,7 @@
 # StarryPass 星愿令 v2
 
+**简体中文** | [English](README.en.md)
+
 ## Made with love ❤️
 
 > [!important]
