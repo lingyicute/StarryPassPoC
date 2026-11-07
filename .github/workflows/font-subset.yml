@@ -12,9 +12,15 @@ permissions:
   contents: write
   actions: write
 
+# 字体任务会改写并推送 index.html；串行执行，避免相邻推送并发时互相覆盖或推送被拒。
+concurrency:
+  group: font-subset-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   subset-and-embed:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
