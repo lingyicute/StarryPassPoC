@@ -39,7 +39,9 @@ def main():
     # 2. 下载完整 Nebulove 字体
     print(f"Downloading font from {FONT_URL}...")
     try:
-        urllib.request.urlretrieve(FONT_URL, TMP_FONT_PATH)
+        # 设置超时，避免网络半开时任务一直挂起直到 CI 被强制终止。
+        with urllib.request.urlopen(FONT_URL, timeout=60) as resp, open(TMP_FONT_PATH, "wb") as out:
+            out.write(resp.read())
     except Exception as e:
         print(f"Failed to download font: {e}", file=sys.stderr)
         sys.exit(1)
