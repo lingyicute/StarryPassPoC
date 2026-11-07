@@ -15,7 +15,7 @@
 
 同一主密码 + 站点代号，本地确定性生成高熵密码。
 
-![image](https://raw.githubusercontent.com/lingyicute/StarryPassAndroidWeb/master/banner.jpg)
+![image](https://raw.githubusercontent.com/lingyicute/StarryPassPoC/master/banner.jpg)
 
 ## 密码学
 
