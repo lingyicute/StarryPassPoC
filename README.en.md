@@ -17,7 +17,7 @@
 
 The same master password + a site code always produce the same high-entropy password, computed locally.
 
-![image](https://raw.githubusercontent.com/lingyicute/StarryPassPoC/master/banner.jpg)
+![image](https://raw.githubusercontent.com/lingyicute/StarryPassPoC/main/banner.jpg)
 
 ## Cryptography
 
