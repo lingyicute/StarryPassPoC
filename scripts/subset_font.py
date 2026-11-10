@@ -51,7 +51,8 @@ def main():
     from fontTools.subset import Subsetter, Options
 
     print("Subsetting font...")
-    font = TTFont(TMP_FONT_PATH)
+    # 不重写 head.modified：否则每次运行的字体字节都不同，CI 会反复提交内容未变的子集。
+    font = TTFont(TMP_FONT_PATH, recalcTimestamp=False)
     subsetter = Subsetter(options=Options())
     subsetter.populate(text="".join(chars))
     subsetter.subset(font)
