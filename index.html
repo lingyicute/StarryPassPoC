@@ -461,11 +461,11 @@
             color: var(--md-sys-color-on-surface-variant);
             transition: color .3s;
         }
-        .strength[data-level="3"] .strength__bar { background: var(--md-sys-color-primary); }
+        .strength[data-level="3"] .strength__bar:nth-child(-n+3) { background: var(--md-sys-color-primary); }
         .strength[data-level="3"] .strength__label { color: var(--md-sys-color-primary); }
-        .strength[data-level="2"] .strength__bar:nth-child(-n+3) { background: var(--md-sys-color-tertiary); }
+        .strength[data-level="2"] .strength__bar:nth-child(-n+2) { background: var(--md-sys-color-tertiary); }
         .strength[data-level="2"] .strength__label { color: var(--md-sys-color-tertiary); }
-        .strength[data-level="1"] .strength__bar:nth-child(-n+2) { background: var(--md-sys-color-error); }
+        .strength[data-level="1"] .strength__bar:nth-child(-n+1) { background: var(--md-sys-color-error); }
         .strength[data-level="1"] .strength__label { color: var(--md-sys-color-error); }
         .strength[data-level="0"] .strength__label { color: var(--md-sys-color-on-surface-variant); }
 
