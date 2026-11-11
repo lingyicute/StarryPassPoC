@@ -519,7 +519,10 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             } catch (err) {
                 if (wasmState && wasmState.pages < Math.ceil(requiredBytes / 65536)
                         && requiredBytes >= 100 * 1048576) throw new Error('MEMORY_LIMIT');
-                if (!wasmState) forcePureJs = true;
+                // 仅编译/实例化失败才永久停用 WASM；超大内存被拒（RangeError）只影响本次请求，
+     // 否则一次失败的极高档会让之后的标准档也一直退回慢速纯 JS。
+     if (!wasmState && !(requiredBytes >= 100 * 1048576
+       && err && (err instanceof RangeError || err.name === 'RangeError'))) forcePureJs = true;
                 if (typeof console === 'object' && console && typeof console.warn === 'function') {
                     console.warn('[spv2] WASM 不可用，本次回退纯 JS：' + (err && err.message ? err.message : err));
                 }
