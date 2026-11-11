@@ -1384,6 +1384,8 @@
                             if (data.ok === true) applyPassword(data.password, payload);
                             else showEmpty(errorText({ message: data.error }));
                         }
+                    } catch (err) {
+                        if (isCurrent(payload)) showEmpty(errorText(err));
                     } finally {
                         finishOne(payload);
                     }

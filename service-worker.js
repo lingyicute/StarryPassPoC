@@ -122,6 +122,7 @@ async function fetchWithTimeout(request, navigation) {
                     probeResponse = null;
                     if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
                 }
+                rawResponse = null;
                 return response;
             } catch (err) {
                 cancelBody(probeResponse);

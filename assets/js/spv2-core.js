@@ -368,7 +368,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function jsCompress(memI32, byteOffX, byteOffY, byteOffOut, xorFlag) {
-        var offX = byteOffX >> 2, offY = byteOffY >> 2, offOut = byteOffOut >> 2, i, base;
+        var offX = byteOffX >>> 2, offY = byteOffY >>> 2, offOut = byteOffOut >>> 2, i, base;
         for (i = 0; i < 256; i++) { var r = memI32[offX + i] ^ memI32[offY + i]; JS_R[i] = r; JS_Z[i] = r; }
         for (i = 0; i < 8; i++) {
             base = i << 5;
@@ -502,7 +502,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     try {
                         mem = new WebAssembly.Memory({ initial: initPages, maximum: 4100 });
                     } catch (e) {
-                        mem = new WebAssembly.Memory({ initial: initPages, maximum: initPages });
+                        mem = new WebAssembly.Memory({ initial: initPages });
                     }
                     var inst = new WebAssembly.Instance(mod, { e: { m: mem } });
                     wasmState = { mod: mod, mem: mem, pages: initPages, fn: inst.exports.c };
@@ -601,7 +601,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         var zeroPtr = baseScratch, inputPtr = baseScratch + 1024, tmpPtr = baseScratch + 2048;
         var addrPtr = baseScratch + 3072, rzPtr = baseScratch + 4096;
         var memI32 = ctx.arena.i32, compress = ctx.arena.compress;
-        var inputI32Off = inputPtr >> 2, addrI32Off = addrPtr >> 2;
+        var inputI32Off = inputPtr >>> 2, addrI32Off = addrPtr >>> 2;
         var xorFlag = pass > 0 ? 1 : 0;
         var dataIndep = (pass === 0 && slice < 2);
 
