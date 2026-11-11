@@ -114,6 +114,25 @@ check(() => assert.equal(warnings.length, 1));
 check(() => assert.match(warnings[0], /INJECTED_WASM_BLOCK/));
 fallback.wipeSession();
 
+// 极高档的超大 WASM 内存被拒（RangeError）只影响该次请求；之后的标准档仍应使用 WASM，而不是永久退回纯 JS。
+{
+    let denyLarge = true;
+    const flakyWasm = {
+        Module: WebAssembly.Module,
+        Instance: WebAssembly.Instance,
+        Memory: function (descriptor) {
+            if (denyLarge && descriptor.initial > 2000) throw new RangeError('WASM memory denied');
+            return new WebAssembly.Memory(descriptor);
+        }
+    };
+    const flakyWarnings = [];
+    const flaky = loadCore({ WebAssembly: flakyWasm, console: { warn: (msg) => flakyWarnings.push(msg) } })(null, false);
+    check(() => assert.equal(flaky._test.getArena(140 * 1048576).isWasm, false, 'denied large request degrades this time'));
+    check(() => assert.equal(flaky._test.getArena(40 * 1024).isWasm, true, 'later small request still uses WASM'));
+    check(() => assert.equal(flakyWarnings.length, 1));
+    flaky.wipeSession();
+}
+
 // 请求对象的六个字段属性在单次派生中均只读取一次。
 {
     const reads = { master: 0, code: 0, tier: 0, mode: 0, counter: 0, length: 0 };
