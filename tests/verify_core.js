@@ -137,14 +137,25 @@ fallback.wipeSession();
         Instance: WebAssembly.Instance,
         Memory: function (descriptor) {
             if (denyLarge && descriptor.initial > 2000) throw new RangeError('WASM memory denied');
-            return new WebAssembly.Memory(descriptor);
+            const mem = new WebAssembly.Memory(descriptor);
+            const origGrow = mem.grow.bind(mem);
+            mem.grow = function (delta) {
+                if (denyLarge && delta > 2000) throw new RangeError('WASM grow denied');
+                return origGrow(delta);
+            };
+            return mem;
         }
     };
     const flakyWarnings = [];
     const flaky = loadCore({ WebAssembly: flakyWasm, console: { warn: (msg) => flakyWarnings.push(msg) } })(null, false);
-    check(() => assert.equal(flaky._test.getArena(140 * 1048576).isWasm, false, 'denied large request degrades this time'));
-    check(() => assert.equal(flaky._test.getArena(40 * 1024).isWasm, true, 'later small request still uses WASM'));
-    check(() => assert.equal(flakyWarnings.length, 1));
+    check(() => assert.equal(flaky._test.getArena(140 * 1048576).isWasm, false, 'denied large initial request degrades this time'));
+    const smallArena = flaky._test.getArena(40 * 1024);
+    check(() => assert.equal(smallArena.isWasm, true, 'later small request still uses WASM'));
+    smallArena.u8.fill(0x5a);
+    check(() => assert.equal(flaky._test.getArena(140 * 1048576).isWasm, false, 'denied large grow after small arena also degrades to pure JS'));
+    check(() => assert.ok(allZero(smallArena.u8), 'previous WASM arena is wiped when grow fails'));
+    check(() => assert.equal(flaky._test.getArena(40 * 1024).isWasm, true, 'small request after denied grow recreates WASM arena'));
+    check(() => assert.equal(flakyWarnings.length, 2));
     flaky.wipeSession();
 }
 
