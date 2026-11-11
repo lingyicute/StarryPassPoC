@@ -1081,17 +1081,17 @@
             function initTheme() {
                 var saved = null;
                 try { saved = localStorage.getItem('sp-theme'); } catch (e) {}
-                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                applyTheme(saved === 'dark' || saved === 'light' ? saved : (prefersDark ? 'dark' : 'light'));
+                var media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+                applyTheme(saved === 'dark' || saved === 'light' ? saved : (media && media.matches ? 'dark' : 'light'));
                 // 未手动选择主题时跟随系统配色变化；手动选择后以保存值为准。
-                var media = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
-                if (media && typeof media.addEventListener === 'function') {
-                    media.addEventListener('change', function (ev) {
-                        var stored = null;
-                        try { stored = localStorage.getItem('sp-theme'); } catch (e) {}
-                        if (stored !== 'dark' && stored !== 'light') applyTheme(ev.matches ? 'dark' : 'light');
-                    });
+                function onSchemeChange(ev) {
+                    var stored = null;
+                    try { stored = localStorage.getItem('sp-theme'); } catch (e) {}
+                    if (stored !== 'dark' && stored !== 'light') applyTheme(ev.matches ? 'dark' : 'light');
                 }
+                // Safari 14 以前的 MediaQueryList 只有 addListener。
+                if (media && typeof media.addEventListener === 'function') media.addEventListener('change', onSchemeChange);
+                else if (media && typeof media.addListener === 'function') media.addListener(onSchemeChange);
             }
             themeToggle.addEventListener('click', function () {
                 var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
