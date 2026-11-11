@@ -62,8 +62,9 @@ async function matchCached(name, request) {
 async function cachedResponse(request, navigation) {
     // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
     if (isShellRequest(request) && (navigation || STATIC_URLS.has(request.url))) {
-        return (await matchCached(RUNTIME, SHELL_URL)) || (await matchCached(RUNTIME, request))
-            || (await matchCached(RUNTIME, APP_ROOT.href)) || (await matchCached(VERSION, request))
+        const distinctReq = request.url !== SHELL_URL && request.url !== APP_ROOT.href;
+        return (await matchCached(RUNTIME, SHELL_URL)) || (distinctReq && await matchCached(RUNTIME, request))
+            || (await matchCached(RUNTIME, APP_ROOT.href)) || (distinctReq && await matchCached(VERSION, request))
             || (await matchCached(VERSION, SHELL_URL)) || (await matchCached(VERSION, APP_ROOT.href));
     }
     return (await matchCached(RUNTIME, request))

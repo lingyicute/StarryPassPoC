@@ -560,6 +560,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             fields.push(lenPrefixed(K));
             fields.push(lenPrefixed(X));
             h0Input = concatBytes(fields);
+            for (var fi = 0; fi < fields.length; fi++) zeroize(fields[fi]);
             H0 = blake2b(h0Input, 64);
             zeroize(h0Input);
 
@@ -712,6 +713,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             prk = hmacSha256(DOMAIN_EXTRACT, sk);
             codeField = lenPrefixed(codeBytes);
             info = concatBytes([DOMAIN_EXPAND, meta, codeField]);
+            zeroize(codeField);
+            zeroize(meta);
 
             var blockIdx = 0;
             prev = new Uint8Array(0);
@@ -950,6 +953,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             if (reqTag && cachedTag && cachedSk && constantTimeEqual(reqTag, cachedTag)) {
                 usedCache = true;
                 sk = cachedSk;
+                zeroize(reqTag); reqTag = null;
             } else {
                 zeroize(cachedTag); cachedTag = null;
                 zeroize(cachedSk); cachedSk = null;
@@ -963,6 +967,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     parallelism: inp.tierSpec.parallelism,
                     tagLength: 32
                 });
+                zeroize(salt); salt = null;
             }
             zeroize(inp.masterBytes);
             var pwd = synthesizePassword(sk, inp.codeBytes, inp.counter, inp.length, inp.mode);
