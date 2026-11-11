@@ -31,6 +31,21 @@ check(() => core._test.validateArgon2Params({ ...params, memoryKiB: 0xffffffff,
     passes: 0xffffffff, parallelism: 0xffffff, tagLength: 0xffffffff }));
 check(() => assert.equal(core._test.argon2idSync({ ...params, tagLength: undefined }).length, 32));
 check(() => assert.equal(core._test.argon2idSync({ ...params, password: new Uint8Array(0), tagLength: 4 }).length, 4));
+{
+    const paramReads = { password: 0, salt: 0, secret: 0, ad: 0, memoryKiB: 0, passes: 0, parallelism: 0, tagLength: 0 };
+    const getterParams = {
+        get password() { paramReads.password++; return params.password; },
+        get salt() { paramReads.salt++; return params.salt; },
+        get secret() { paramReads.secret++; return undefined; },
+        get ad() { paramReads.ad++; return undefined; },
+        get memoryKiB() { paramReads.memoryKiB++; return params.memoryKiB; },
+        get passes() { paramReads.passes++; return params.passes; },
+        get parallelism() { paramReads.parallelism++; return params.parallelism; },
+        get tagLength() { paramReads.tagLength++; return params.tagLength; }
+    };
+    check(() => assert.equal(core._test.argon2idSync(getterParams).length, 32));
+    check(() => assert.deepEqual(paramReads, { password: 1, salt: 1, secret: 1, ad: 1, memoryKiB: 1, passes: 1, parallelism: 1, tagLength: 1 }));
+}
 
 // 证明默认引擎真的使用原生 WASM 压缩核，而非拿两份纯 JS 做“一致性”比较。
 const wasmArena = core._test.getArena(40 * 1024);

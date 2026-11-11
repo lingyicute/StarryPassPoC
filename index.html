@@ -1358,7 +1358,7 @@
             }
 
             function fallbackToLocal() {
-                var shouldRetry = isCurrent(pendingPayload || currentPayload) || !!debounceTimer;
+                var shouldRetry = isCurrent(pendingPayload || currentPayload);
                 stopWorker();
                 workerAllowed = false;
                 pendingPayload = null;
