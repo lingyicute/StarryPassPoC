@@ -500,8 +500,9 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     var initPages = Math.max(neededPages, 2);
                     var mem;
                     try {
-                        mem = new WebAssembly.Memory({ initial: initPages, maximum: 4100 });
+                        mem = new WebAssembly.Memory({ initial: initPages, maximum: Math.max(initPages, 4100) });
                     } catch (e) {
+                        if (initPages >= 4100) throw e;
                         mem = new WebAssembly.Memory({ initial: initPages });
                     }
                     var inst = new WebAssembly.Instance(mod, { e: { m: mem } });
@@ -548,11 +549,9 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         };
     }
 
-    function initArgon2Ctx(params) {
-        var P = params.password, S = params.salt;
-        var K = params.secret || new Uint8Array(0), X = params.ad || new Uint8Array(0);
-        var m = params.memoryKiB, t = params.passes, p = params.parallelism;
-        var T = params.tagLength === undefined ? 32 : params.tagLength;
+    function initArgon2Ctx(spec) {
+        var P = spec.P, S = spec.S, K = spec.K, X = spec.X;
+        var m = spec.m, t = spec.t, p = spec.p, T = spec.T;
         var yType = 2, version = 0x13;
         var headerFixed = new Uint8Array(24), fields, h0Input, H0, seedBuf, blkBytes, arena;
         try {
@@ -668,30 +667,34 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function validateArgon2Params(params) {
-        if (!params) throw new Error('ARGON2_INVALID_INPUT');
+        if (!params || typeof params !== 'object') throw new Error('ARGON2_INVALID_INPUT');
         var fields = ['password', 'salt', 'secret', 'ad'];
+        var bytes = new Array(4);
         for (var i = 0; i < fields.length; i++) {
             var value = params[fields[i]];
-            if (i >= 2 && value == null) continue;
+            if (i >= 2 && value == null) { bytes[i] = new Uint8Array(0); continue; }
             if (!(value instanceof Uint8Array)) throw new Error('ARGON2_INVALID_INPUT');
             if (value.length > 0xffffffff) throw new Error('ARGON2_INPUT_TOO_LONG');
+            bytes[i] = value;
         }
         var m = params.memoryKiB, t = params.passes, p = params.parallelism;
-        var T = params.tagLength === undefined ? 32 : params.tagLength;
-        if (params.salt.length < 8) throw new Error('ARGON2_SALT_TOO_SHORT');
+        var rawT = params.tagLength;
+        var T = rawT === undefined ? 32 : rawT;
+        if (bytes[1].length < 8) throw new Error('ARGON2_SALT_TOO_SHORT');
         if (!Number.isInteger(p) || p < 1 || p > 0xffffff
                 || !Number.isInteger(t) || t < 1 || t > 0xffffffff
                 || !Number.isInteger(m) || m < 0 || m > 0xffffffff) throw new Error('ARGON2_INVALID_COST');
         if (m < 8 * p) throw new Error('ARGON2_MEMORY_TOO_LOW');
         if (!Number.isInteger(T) || T > 0xffffffff) throw new Error('ARGON2_INVALID_TAG_LENGTH');
         if (T < 4) throw new Error('ARGON2_TAG_TOO_SHORT');
+        return { P: bytes[0], S: bytes[1], K: bytes[2], X: bytes[3], m: m, t: t, p: p, T: T };
     }
 
     function argon2idSync(params) {
-        validateArgon2Params(params);
+        var spec = validateArgon2Params(params);
         var ctx;
         try {
-            ctx = initArgon2Ctx(params);
+            ctx = initArgon2Ctx(spec);
             for (var pass = 0; pass < ctx.t; pass++) {
                 for (var slice = 0; slice < 4; slice++) {
                     runArgon2Slice(ctx, pass, slice);
