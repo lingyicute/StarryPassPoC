@@ -4,6 +4,7 @@ import base64
 import os
 import re
 import sys
+import tempfile
 import urllib.request
 
 # 子集化用的完整字体来源
@@ -11,8 +12,6 @@ FONT_URL = "https://raw.githubusercontent.com/lingyicute/Nebulove/main/Nebulove.
 # 仓库根目录的 index.html（无论从哪里运行脚本都能定位）
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_PATH = os.path.join(REPO_ROOT, "index.html")
-TMP_FONT_PATH = "/tmp/Nebulove.ttf"
-TMP_WOFF2_PATH = "/tmp/Nebulove-Subset.woff2"
 
 
 def main():
@@ -36,36 +35,40 @@ def main():
 
     print(f"Total unique characters needed: {len(chars)}")
 
-    # 2. 下载完整 Nebulove 字体
-    print(f"Downloading font from {FONT_URL}...")
-    try:
-        # 设置超时，避免网络半开时任务一直挂起直到 CI 被强制终止。
-        with urllib.request.urlopen(FONT_URL, timeout=60) as resp, open(TMP_FONT_PATH, "wb") as out:
-            out.write(resp.read())
-    except Exception as e:
-        print(f"Failed to download font: {e}", file=sys.stderr)
-        sys.exit(1)
+    with tempfile.TemporaryDirectory(prefix="nebulove-subset-") as tmp_dir:
+        tmp_font_path = os.path.join(tmp_dir, "Nebulove.ttf")
+        tmp_woff2_path = os.path.join(tmp_dir, "Nebulove-Subset.woff2")
 
-    # 3. 用 fontTools 子集化
-    from fontTools.ttLib import TTFont
-    from fontTools.subset import Subsetter, Options
+        # 2. 下载完整 Nebulove 字体
+        print(f"Downloading font from {FONT_URL}...")
+        try:
+            # 设置超时，避免网络半开时任务一直挂起直到 CI 被强制终止。
+            with urllib.request.urlopen(FONT_URL, timeout=60) as resp, open(tmp_font_path, "wb") as out:
+                out.write(resp.read())
+        except Exception as e:
+            print(f"Failed to download font: {e}", file=sys.stderr)
+            sys.exit(1)
 
-    print("Subsetting font...")
-    # 不重写 head.modified：否则每次运行的字体字节都不同，CI 会反复提交内容未变的子集。
-    font = TTFont(TMP_FONT_PATH, recalcTimestamp=False)
-    subsetter = Subsetter(options=Options())
-    subsetter.populate(text="".join(chars))
-    subsetter.subset(font)
+        # 3. 用 fontTools 子集化
+        from fontTools.ttLib import TTFont
+        from fontTools.subset import Subsetter, Options
 
-    font.flavor = "woff2"
-    font.save(TMP_WOFF2_PATH)
+        print("Subsetting font...")
+        # 不重写 head.modified：否则每次运行的字体字节都不同，CI 会反复提交内容未变的子集。
+        font = TTFont(tmp_font_path, recalcTimestamp=False)
+        subsetter = Subsetter(options=Options())
+        subsetter.populate(text="".join(sorted(chars)))
+        subsetter.subset(font)
 
-    woff2_size = os.path.getsize(TMP_WOFF2_PATH)
-    print(f"Subsetted WOFF2 size: {woff2_size} bytes ({woff2_size / 1024:.2f} KB)")
+        font.flavor = "woff2"
+        font.save(tmp_woff2_path)
 
-    # 4. 转 base64
-    with open(TMP_WOFF2_PATH, "rb") as f:
-        b64_font = base64.b64encode(f.read()).decode("utf-8")
+        woff2_size = os.path.getsize(tmp_woff2_path)
+        print(f"Subsetted WOFF2 size: {woff2_size} bytes ({woff2_size / 1024:.2f} KB)")
+
+        # 4. 转 base64
+        with open(tmp_woff2_path, "rb") as f:
+            b64_font = base64.b64encode(f.read()).decode("utf-8")
 
     # 5. 替换 index.html 中的 @font-face（保留原有缩进风格）
     # 只保留内嵌 data URI：远程回退一旦被 CSP 拦截只会产生控制台噪音，

@@ -98,8 +98,11 @@ async function fetchWithTimeout(request, navigation) {
     let timer, rawResponse = null, probeResponse = null;
     const timeout = new Promise((_, reject) => {
         timer = setTimeout(() => {
-            cancelBody(probeResponse);
-            cancelBody(rawResponse);
+            const probe = probeResponse, raw = rawResponse;
+            probeResponse = null;
+            rawResponse = null;
+            cancelBody(probe);
+            cancelBody(raw);
             reject(new Error("NETWORK_TIMEOUT"));
             controller.abort();
         }, NETWORK_TIMEOUT_MS);
@@ -122,7 +125,9 @@ async function fetchWithTimeout(request, navigation) {
                 return response;
             } catch (err) {
                 cancelBody(probeResponse);
-                cancelBody(response);
+                probeResponse = null;
+                cancelBody(rawResponse);
+                rawResponse = null;
                 throw err;
             }
         });

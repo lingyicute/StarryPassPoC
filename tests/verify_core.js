@@ -104,13 +104,30 @@ for (const crypto of [undefined, { getRandomValues() { throw new Error('RNG_UNAV
     engine.wipeSession();
 }
 
-// WASM 编译失败是可见的正常降级，不可误报成内存不足。
+// WASM 编译失败是可见的正常降级，不可误报成内存不足，且后续派生不再重复尝试编译或刷屏告警。
 const warnings = [];
 const brokenWasm = { ...WebAssembly, Module: function () { throw new Error('INJECTED_WASM_BLOCK'); } };
 const fallback = loadCore({ WebAssembly: brokenWasm, console: { warn: (msg) => warnings.push(msg) } })(null, false);
 check(() => assert.equal(fallback._test.getArena(40 * 1024).isWasm, false));
+check(() => assert.equal(fallback.deriveSync(request).password, 'WueNKY^SRHRh4!DL'));
 check(() => assert.equal(warnings.length, 1));
 check(() => assert.match(warnings[0], /INJECTED_WASM_BLOCK/));
+fallback.wipeSession();
+
+// 请求对象的六个字段属性在单次派生中均只读取一次。
+{
+    const reads = { master: 0, code: 0, tier: 0, mode: 0, counter: 0, length: 0 };
+    const getterReq = {
+        get master() { reads.master++; return request.master; },
+        get code() { reads.code++; return request.code; },
+        get tier() { reads.tier++; return request.tier; },
+        get mode() { reads.mode++; return request.mode; },
+        get counter() { reads.counter++; return request.counter; },
+        get length() { reads.length++; return request.length; }
+    };
+    check(() => assert.equal(cachedCore.deriveSync(getterReq).password, 'WueNKY^SRHRh4!DL'));
+    check(() => assert.deepEqual(reads, { master: 1, code: 1, tier: 1, mode: 1, counter: 1, length: 1 }));
+}
 // 纯 JS 分配失败也映射为可识别的内存错误。
 const noMemory = loadCore({ ArrayBuffer: function () { throw new RangeError('allocation failed'); } })(null, true);
 check(() => assert.throws(() => noMemory._test.getArena(40 * 1024), /MEMORY_LIMIT/));
