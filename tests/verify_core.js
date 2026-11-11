@@ -46,6 +46,16 @@ new Uint8Array(memory.buffer).fill(0xa5);
 core._test.argon2idSync(params);
 check(() => assert.equal(memory.buffer.byteLength, grownBytes));
 check(() => assert.ok(allZero(new Uint8Array(memory.buffer)), 'entire grown arena is wiped'));
+// 会话结束后允许回收大 arena；之后的小请求应使用较小的新内存，且复用编译模块。
+const compiledModule = core._test.state().wasmState.mod;
+new Uint8Array(memory.buffer).fill(0xa5);
+core.wipeSession();
+check(() => assert.ok(allZero(new Uint8Array(memory.buffer)), 'released arena is wiped before dropping it'));
+check(() => assert.equal(core._test.state().wasmState, null, 'wiped engine no longer retains the arena'));
+const smallerArena = core._test.getArena(40 * 1024);
+check(() => assert.notEqual(smallerArena.u8.buffer, memory.buffer, 'a fresh arena is allocated after wipe'));
+check(() => assert.ok(smallerArena.u8.byteLength < grownBytes, 'fresh small request does not retain peak capacity'));
+check(() => assert.equal(core._test.state().wasmState.mod, compiledModule, 'compiled module is reused'));
 
 // 压缩阶段异常同样走 finally 清理，且不能继续持有被替换的缓存密钥。
 const request = { master: 'correct horse battery staple', code: 'github', tier: 'standard',
@@ -69,6 +79,11 @@ beforeWipe.SHA256_W.fill(7); beforeWipe.B2B_V.fill(7); beforeWipe.B2B_M.fill(7);
 cachedCore.wipeSession();
 check(() => assert.ok(allZero(beforeWipe.cachedSk) && allZero(beforeWipe.cachedTag) && allZero(beforeWipe.sessionNonce)));
 check(() => assert.ok(allZero(beforeWipe.SHA256_W) && allZero(beforeWipe.B2B_V) && allZero(beforeWipe.B2B_M)));
+check(() => assert.equal(cachedCore._test.state().wasmState, null, 'normal session wipe drops its arena'));
+const afterWipe = cachedCore.deriveSync(request);
+check(() => assert.equal(afterWipe.password, 'WueNKY^SRHRh4!DL', 'recreated arena preserves the password'));
+check(() => assert.equal(afterWipe.cached, false, 'recreated session does not reuse the old key'));
+check(() => assert.equal(cachedCore._test.state().wasmState.mod, beforeWipe.wasmState.mod, 'recreated engine reuses module'));
 
 // 没有 CSPRNG、或 CSPRNG 抛异常：派生仍确定且正确，但既不复用也不保留密钥缓存。
 for (const crypto of [undefined, { getRandomValues() { throw new Error('RNG_UNAVAILABLE'); } }]) {
