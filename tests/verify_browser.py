@@ -206,11 +206,16 @@ async def test_queue(browser, url):
         }""")
         await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pagehide'))")
         check(await page.get_attribute('#master-input', 'type') == 'password' and not await page.is_enabled('#copy-btn')
+              and await page.input_value('#master-input') == ''
               and await page.inner_text('#password-output') == '请输入主密码和代号'
               and await page.locator('.ripple-wave').count() == 0
               and not await page.evaluate("document.getElementById('snackbar').classList.contains('is-visible')"),
-              'pagehide masks master input and clears displayed password, snackbar and ripples from DOM')
+              'pagehide clears the master, displayed password, snackbar and ripples from DOM')
         await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+        await page.clock.run_for(300)
+        check(await page.input_value('#master-input') == '' and not await page.is_enabled('#copy-btn'),
+              'BFCache restore never silently derives with the old master')
+        await page.fill('#master-input', 'correct horse battery staple')
         await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
         await page.fill('#master-input', '')
@@ -222,6 +227,41 @@ async def test_queue(browser, url):
     finally:
         await context.close()
     print('PASS browser: queue, stale replies, PIN and input invalidation')
+
+
+async def test_history_wipes_master(playwright, url, state):
+    # Playwright normally disables BFCache. Exercise an actual history restore
+    # with BFCache enabled, rather than only dispatching synthetic events.
+    state['allow_bfcache'] = True  # no-store responses deliberately disable BFCache
+    browser = await playwright.chromium.launch(
+        channel='chromium', args=['--ignore-certificate-errors'], ignore_default_args=['--disable-back-forward-cache'])
+    context = await browser.new_context(ignore_https_errors=True, service_workers='block')
+    page = await context.new_page()
+    await page.add_init_script(MOCK_WORKER)
+    try:
+        await page.goto(url)
+        await fill(page)
+        await poll(lambda: page.evaluate("__workers[0].messages.some(m => m.type === 'derive')"))
+        await reply(page, (await requests(page))[-1])
+        check(await page.is_enabled('#copy-btn'), 'history test starts with a derived password')
+        await page.evaluate("""() => {
+            window.__historyRestored = false;
+            window.addEventListener('pageshow', e => { if (e.persisted) window.__historyRestored = true; });
+        }""")
+        await page.goto(url + '?away=1')
+        await page.go_back(wait_until='commit')
+        await poll(lambda: page.evaluate('window.__historyRestored === true'))
+        check(await page.evaluate('window.__historyRestored === true'), 'browser actually restored from BFCache')
+        check(await page.input_value('#master-input') == '' and await page.input_value('#code-input') == 'github',
+              'history restore retains the site code but not the master password')
+        check(not await page.is_enabled('#copy-btn') and '请填写完整' in await page.inner_text('#password-output'),
+              'history restore neither displays nor re-derives the old password')
+        check(await page.evaluate('__workers.length') == 1, 'history restore does not start another Worker')
+    finally:
+        await context.close()
+        await browser.close()
+        state['allow_bfcache'] = False
+    print('PASS browser: actual BFCache history restore clears master')
 
 
 async def test_timeout_and_reset(browser, url):
@@ -656,7 +696,7 @@ async def main():
                 pass
 
             def end_headers(self):
-                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Cache-Control', 'no-cache' if state.get('allow_bfcache') else 'no-store')
                 super().end_headers()
 
             def do_GET(self):
@@ -677,6 +717,7 @@ async def main():
             async with async_playwright() as playwright:
                 browser = await playwright.chromium.launch(args=['--ignore-certificate-errors'])
                 try:
+                    await test_history_wipes_master(playwright, url, state)
                     await test_queue(browser, url)
                     await test_timeout_and_reset(browser, url)
                     await test_local_fallback(browser, url)

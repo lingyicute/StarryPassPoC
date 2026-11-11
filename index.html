@@ -1507,6 +1507,8 @@
 
             function wipe() {
                 deriveId += 1;
+                // BFCache retains the DOM: drop the master value as well as the engine session.
+                masterInput.value = '';
                 masterComposing = false; codeComposing = false;
                 clearTimeout(debounceTimer); debounceTimer = null;
                 pendingPayload = null;
@@ -1531,7 +1533,12 @@
                 document.querySelectorAll('.ripple-wave').forEach(function (w) { w.remove(); });
                 wipe();
             });
-            window.addEventListener('pageshow', function (event) { if (event.persisted) refresh(); });
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    masterInput.value = ''; // Do not trust restored form state to remain empty.
+                    refresh();
+                }
+            });
 
             document.querySelectorAll('.ripple').forEach(function (btn) {
                 btn.addEventListener('pointerdown', function (e) {
