@@ -202,12 +202,12 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     function b2bG(v, a, b, c, d, ix, iy, m) {
         var alo = v[a], ahi = v[a + 1], blo = v[b], bhi = v[b + 1], clo = v[c], chi = v[c + 1], dlo = v[d], dhi = v[d + 1];
         var s0 = (alo >>> 0) + (blo >>> 0) + (m[ix] >>> 0);
-        alo = s0 | 0; ahi = (ahi + bhi + m[ix + 1] + (s0 > 0xffffffff ? Math.floor(s0 / 4294967296) : 0)) | 0;
+        alo = s0 | 0; ahi = (ahi + bhi + m[ix + 1] + ((s0 / 4294967296) | 0)) | 0;
         var xlo = dlo ^ alo, xhi = dhi ^ ahi; dlo = xhi; dhi = xlo;
         s0 = (clo >>> 0) + (dlo >>> 0); clo = s0 | 0; chi = (chi + dhi + (s0 > 0xffffffff ? 1 : 0)) | 0;
         xlo = blo ^ clo; xhi = bhi ^ chi; blo = (xlo >>> 24) | (xhi << 8); bhi = (xhi >>> 24) | (xlo << 8);
         s0 = (alo >>> 0) + (blo >>> 0) + (m[iy] >>> 0);
-        alo = s0 | 0; ahi = (ahi + bhi + m[iy + 1] + (s0 > 0xffffffff ? Math.floor(s0 / 4294967296) : 0)) | 0;
+        alo = s0 | 0; ahi = (ahi + bhi + m[iy + 1] + ((s0 / 4294967296) | 0)) | 0;
         xlo = dlo ^ alo; xhi = dhi ^ ahi; dlo = (xlo >>> 16) | (xhi << 16); dhi = (xhi >>> 16) | (xlo << 16);
         s0 = (clo >>> 0) + (dlo >>> 0); clo = s0 | 0; chi = (chi + dhi + (s0 > 0xffffffff ? 1 : 0)) | 0;
         xlo = blo ^ clo; xhi = bhi ^ chi; blo = (xlo << 1) | (xhi >>> 31); bhi = (xhi << 1) | (xlo >>> 31);
@@ -529,7 +529,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     forcePureJs = true;
                 }
                 if (typeof console === 'object' && console && typeof console.warn === 'function') {
-                    console.warn('[spv2] WASM 不可用，本次回退纯 JS：' + (err && err.message ? err.message : err));
+                    try { console.warn('[spv2] WASM 不可用，本次回退纯 JS：' + (err && err.message ? err.message : err)); } catch (_) {}
                 }
             }
         }
@@ -590,7 +590,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                 baseScratch: baseScratch, arena: arena
             };
         } catch (err) {
-            if (arena) zeroize(arena.u8);
+            if (arena && !arena.isWasm) zeroize(arena.u8);
             throw err;
         } finally {
             if (fields) for (var f = 0; f < fields.length; f++) zeroize(fields[f]);
@@ -608,23 +608,24 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         var inputI32Off = inputPtr >>> 2, addrI32Off = addrPtr >>> 2;
         var xorFlag = pass > 0 ? 1 : 0;
         var dataIndep = (pass === 0 && slice < 2);
+        var sliceStart = slice * sliceLen;
+        var startIdx = (pass === 0 && slice === 0) ? 2 : 0;
+        if (dataIndep) {
+            memI32[inputI32Off + 0]  = pass;
+            memI32[inputI32Off + 4]  = slice;
+            memI32[inputI32Off + 6]  = ctx.totalBlocks;
+            memI32[inputI32Off + 8]  = t;
+            memI32[inputI32Off + 10] = ctx.yType;
+        }
 
         for (var l = 0; l < p; l++) {
             var addrCounter = 0;
-            if (dataIndep) {
-                memI32.fill(0, inputI32Off, inputI32Off + 256);
-                memI32[inputI32Off + 0]  = pass;
-                memI32[inputI32Off + 2]  = l;
-                memI32[inputI32Off + 4]  = slice;
-                memI32[inputI32Off + 6]  = ctx.totalBlocks;
-                memI32[inputI32Off + 8]  = t;
-                memI32[inputI32Off + 10] = ctx.yType;
-            }
-            var startIdx = (pass === 0 && slice === 0) ? 2 : 0;
+            var laneBase = l * laneLen;
+            if (dataIndep) memI32[inputI32Off + 2] = l;
             for (var idx = startIdx; idx < sliceLen; idx++) {
                 var j1, j2;
-                var curInLane = slice * sliceLen + idx;
-                var prevIdx = curInLane === 0 ? laneLen - 1 : curInLane - 1;
+                var curInLane = sliceStart + idx;
+                var prevBlock = laneBase + (curInLane === 0 ? laneLen - 1 : curInLane - 1);
                 if (dataIndep) {
                     var subIdx = idx & 127;
                     if (subIdx === 0 || idx === startIdx) {
@@ -636,15 +637,15 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     j1 = memI32[addrI32Off + subIdx * 2];
                     j2 = memI32[addrI32Off + subIdx * 2 + 1];
                 } else {
-                    var prevI32 = (l * laneLen + prevIdx) * 256;
+                    var prevI32 = prevBlock * 256;
                     j1 = memI32[prevI32];
                     j2 = memI32[prevI32 + 1];
                 }
                 var refBlock = indexAlpha(pass, l, slice, p, sliceLen, laneLen, idx, j1, j2);
                 compress(
-                    (l * laneLen + prevIdx) * 1024,
+                    prevBlock * 1024,
                     refBlock * 1024,
-                    (l * laneLen + curInLane) * 1024,
+                    (laneBase + curInLane) * 1024,
                     xorFlag,
                     rzPtr
                 );
@@ -658,7 +659,11 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         try {
             for (var fl = 0; fl < ctx.p; fl++) {
                 var lastByteOff = (fl * ctx.laneLen + ctx.laneLen - 1) * 1024;
-                for (var fb = 0; fb < 1024; fb++) finalBytes[fb] ^= memU8[lastByteOff + fb];
+                if (fl === 0) {
+                    finalBytes.set(memU8.subarray(lastByteOff, lastByteOff + 1024));
+                } else {
+                    for (var fb = 0; fb < 1024; fb++) finalBytes[fb] ^= memU8[lastByteOff + fb];
+                }
             }
             return argon2HashPrime(finalBytes, ctx.T);
         } finally {
