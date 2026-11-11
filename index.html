@@ -1235,7 +1235,7 @@
             function errorText(err) {
                 var code = err && err.message ? err.message : 'DERIVE_ERROR';
                 if (code === 'EMPTY_INPUT') return '请填写完整的主密码和代号';
-                if (code === 'MEMORY_LIMIT') return '内存不足，请改用「标准」档';
+                if (code === 'MEMORY_LIMIT') return state.tier === 'paranoid' ? '内存不足，请改用「标准」档' : '内存不足，请关闭其他标签页后重试';
                 return '派生失败，请重试';
             }
 
