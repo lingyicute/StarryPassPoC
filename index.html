@@ -1161,9 +1161,9 @@
                 var n = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(s) ? Number(s) : parseInt(s, 10);
                 return Number.isFinite(n) ? Math.trunc(n) : n;
             }
-            function readCounter() {
-                var n = parseCounter(counterInput.value);
-                return Math.max(1, Math.min(9999, Number.isNaN(n) ? 1 : (n || 1)));
+            function readCounter(parsed) {
+                var n = parsed === undefined ? parseCounter(counterInput.value) : parsed;
+                return Number.isNaN(n) ? 1 : Math.max(1, Math.min(9999, n));
             }
             function clampCounter() {
                 state.counter = readCounter();
@@ -1171,20 +1171,20 @@
             }
             document.getElementById('ctr-dec').addEventListener('click', function () {
                 var prev = state.counter;
-                counterInput.value = String(Math.max(1, readCounter() - 1));
-                clampCounter();
+                state.counter = Math.max(1, readCounter() - 1);
+                counterInput.value = String(state.counter);
                 if (state.counter !== prev) scheduleRefresh();
             });
             document.getElementById('ctr-inc').addEventListener('click', function () {
                 var prev = state.counter;
-                counterInput.value = String(Math.min(9999, readCounter() + 1));
-                clampCounter();
+                state.counter = Math.min(9999, readCounter() + 1);
+                counterInput.value = String(state.counter);
                 if (state.counter !== prev) scheduleRefresh();
             });
             counterInput.addEventListener('input', function () {
                 var prev = state.counter;
                 var raw = parseCounter(counterInput.value);
-                state.counter = readCounter();
+                state.counter = readCounter(raw);
                 // 超出上限的数字只会越敲越大，可以立即回写，避免显示值与实际生效值不一致。
                 if (raw > 9999 || raw < 0) counterInput.value = String(state.counter);
                 if (state.counter !== prev) scheduleRefresh();
@@ -1358,7 +1358,7 @@
             }
 
             function fallbackToLocal() {
-                var shouldRetry = isCurrent(pendingPayload || currentPayload);
+                var shouldRetry = isCurrent(pendingPayload) || isCurrent(currentPayload);
                 stopWorker();
                 workerAllowed = false;
                 pendingPayload = null;
