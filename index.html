@@ -951,7 +951,7 @@
                 // Strip BEFORE de-leeting so suffix digits do not turn into letters.
                 // Try every boundary to preserve digit-ending roots (e.g. abc123!).
                 var stem = value;
-                for (var i = 0; i < 8 && /[0-9!@#$%^&*()_+\-=[\]{};:"\\|,.<>/?~`]/.test(stem.slice(-1)); i++) {
+                for (var i = 0; i < 8 && /[0-9!@#$%^&*()_+\-=[\]{};:'"\\|,.<>/?~`]/.test(stem.slice(-1)); i++) {
                     stem = stem.slice(0, -1);
                     if (isWeakRoot(stem)) return true;
                 }
