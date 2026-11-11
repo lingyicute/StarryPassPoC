@@ -388,7 +388,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     /* Transparent symbolic WASM i64 G-block compressor (reusable bounded linear memory) */
-    var wasmState = null;
+    var wasmModule = null, wasmState = null;
 
     function buildWasmModule() {
         function uleb(n) { var o = []; do { var b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); } while (n); return o; }
@@ -496,7 +496,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             try {
                 var neededPages = Math.ceil(requiredBytes / 65536);
                 if (!wasmState) {
-                    var mod = buildWasmModule();
+                    var mod = wasmModule || (wasmModule = buildWasmModule());
                     var initPages = Math.max(neededPages, 2);
                     var mem;
                     try {
@@ -853,6 +853,9 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         zeroize(SHA256_W); zeroize(B2B_V); zeroize(B2B_M); zeroize(JS_R); zeroize(JS_Z);
         if (wasmState && wasmState.mem) {
             new Uint8Array(wasmState.mem.buffer).fill(0);
+            // A WASM memory cannot shrink. Drop it after wiping so a later
+            // standard-tier session need not retain a paranoid-tier arena.
+            wasmState = null;
         }
     }
 
