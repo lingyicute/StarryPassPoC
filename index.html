@@ -1289,8 +1289,12 @@
             }
 
             function wipeEngines() {
-                if (busy || !hasSession) return;
-                hasSession = false;
+                if (!hasSession) return;
+                // An in-flight Worker holds the old input; terminate it instead
+                // of waiting for a potentially long KDF to finish. Detach a
+                // local task too, then invalidate its asynchronous session.
+                if (busy) stopWorker();
+                else hasSession = false;
                 if (localEngine) localEngine.wipeSession();
                 if (worker) {
                     try { worker.postMessage({ type: 'wipe' }); } catch (err) {}
