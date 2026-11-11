@@ -619,6 +619,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             var startIdx = (pass === 0 && slice === 0) ? 2 : 0;
             for (var idx = startIdx; idx < sliceLen; idx++) {
                 var j1, j2;
+                var curInLane = slice * sliceLen + idx;
+                var prevIdx = curInLane === 0 ? laneLen - 1 : curInLane - 1;
                 if (dataIndep) {
                     var subIdx = idx & 127;
                     if (subIdx === 0 || idx === startIdx) {
@@ -630,13 +632,10 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     j1 = memI32[addrI32Off + subIdx * 2];
                     j2 = memI32[addrI32Off + subIdx * 2 + 1];
                 } else {
-                    var prevInLane = (slice * sliceLen + idx - 1 + laneLen) % laneLen;
-                    var prevI32 = (l * laneLen + prevInLane) * 256;
+                    var prevI32 = (l * laneLen + prevIdx) * 256;
                     j1 = memI32[prevI32];
                     j2 = memI32[prevI32 + 1];
                 }
-                var curInLane = slice * sliceLen + idx;
-                var prevIdx = (curInLane - 1 + laneLen) % laneLen;
                 var refBlock = indexAlpha(pass, l, slice, p, sliceLen, laneLen, idx, j1, j2);
                 compress(
                     (l * laneLen + prevIdx) * 1024,
