@@ -174,6 +174,30 @@ fallback.wipeSession();
     flaky.wipeSession();
 }
 
+// WASM 通过自检后运行期降级为纯 JS：必须先对纯 JS 压缩核补做 KAT，且只补一次。
+{
+    const katBytes = 32 * 1024 + 6144;
+    let jsKats = 0;
+    const CountingBuffer = function (bytes) { if (bytes === katBytes) jsKats++; return new ArrayBuffer(bytes); };
+    const denyGrowWasm = {
+        Module: WebAssembly.Module,
+        Instance: WebAssembly.Instance,
+        Memory: function (descriptor) {
+            const mem = new WebAssembly.Memory(descriptor);
+            mem.grow = function () { throw new RangeError('WASM grow denied'); };
+            return mem;
+        }
+    };
+    const degraded = loadCore({ WebAssembly: denyGrowWasm, ArrayBuffer: CountingBuffer, console: { warn() {} } })(null, false);
+    check(() => assert.equal(degraded.deriveSync(request).password, 'WueNKY^SRHRh4!DL'));
+    check(() => assert.equal(jsKats, 1, 'pure-JS fallback is KAT-gated before its first result'));
+    check(() => assert.equal(degraded._test.getArena(40 * 1024).isWasm, true));
+    check(() => assert.equal(degraded.deriveSync({ ...request, code: 'gitlab' }).cached, false));
+    check(() => assert.equal(degraded._test.state().wasmState, null, 'second derivation degraded again'));
+    check(() => assert.equal(jsKats, 1, 'pure-JS KAT is not repeated'));
+    degraded.wipeSession();
+}
+
 // 请求对象的六个字段属性在单次派生中均只读取一次。
 {
     const reads = { master: 0, code: 0, tier: 0, mode: 0, counter: 0, length: 0 };
