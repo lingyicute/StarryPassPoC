@@ -968,6 +968,17 @@
                 return false;
             }
 
+            // KMP 前缀函数求最短循环节：对所有 i 满足 s[i] === s[i + p] 的最小 p。
+            function shortestPeriod(cps) {
+                var n = cps.length, fail = new Int32Array(n), k = 0;
+                for (var i = 1; i < n; i++) {
+                    while (k > 0 && cps[i] !== cps[k]) k = fail[k - 1];
+                    if (cps[i] === cps[k]) k++;
+                    fail[i] = k;
+                }
+                return n ? n - fail[n - 1] : 0;
+            }
+
             function estimateCrackResistance(master, code, tier, mode, length) {
                 var m = String(master || '').normalize('NFC');
                 var c = String(code || '').trim().normalize('NFC');
@@ -995,8 +1006,12 @@
                 }
                 var asciiPool = (hasLower ? 26 : 0) + (hasUpper ? 26 : 0) + (hasDigit ? 10 : 0) + (hasSym ? 33 : 0);
                 var asciiBits = asciiPool > 0 ? Math.log2(asciiPool) : 0;
+                // 整串由短单元循环而成（aaaa…、abcabc…）时只计一个循环节，再加循环次数的信息量；
+                // 否则超长重复串会被逐字符累加成“强”。
+                var unitLen = shortestPeriod(cps);
+                if (unitLen * 2 > cps.length) unitLen = cps.length;
                 var bits = 0, seen = Object.create(null), prevCh, prevCp, count, baseBits;
-                for (i = 0; i < cps.length; i++) {
+                for (i = 0; i < unitLen; i++) {
                     ch = cps[i]; cp = ch.codePointAt(0);
                     if (cp >= 32 && cp <= 126) baseBits = asciiBits;
                     else if ((cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0x20000 && cp <= 0x2ebef)) baseBits = 7.5;
@@ -1011,6 +1026,7 @@
                     else bits += baseBits * 0.35;
                     seen[ch] = count + 1;
                 }
+                bits += Math.log2(cps.length / unitLen);
                 if (tier === 'paranoid') bits += 3;
                 if (mode === 'pin') {
                     if (bits < 44 || outBits <= 0) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(Math.min(bits, outBits)) };
