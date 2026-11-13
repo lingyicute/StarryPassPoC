@@ -110,4 +110,14 @@ for (const tier of ['standard', 'paranoid']) {
         }
     }
 }
+// 由短单元循环而成的超长串按“循环节 + 循环次数”计，不得逐字符累加成中/强。
+for (const cyclic of ['a'.repeat(130), 'ac'.repeat(60), 'abc'.repeat(40), '1234567890'.repeat(6), '星愿'.repeat(20)]) {
+    assert.equal(estimate(cyclic).level, 1, `cyclic master overrated: ${cyclic.slice(0, 12)}…`);
+}
+assert.equal(context.shortestPeriod(Array.from('abcabcab')), 3);
+assert.equal(context.shortestPeriod(Array.from('abcabd')), 6);
+assert.equal(context.shortestPeriod([]), 0);
+assert.equal(estimate('tidal basin'.repeat(4)).bits, estimate('tidal basin').bits + 2, 'four cycles add log2(4) bits');
+assert.ok(estimate('tidal basin at dawn tidal').bits > estimate('tidal basin at dawn').bits,
+    'a partial repeat is still scored per character');
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
