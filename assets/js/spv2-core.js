@@ -388,7 +388,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     /* Transparent symbolic WASM i64 G-block compressor (reusable bounded linear memory) */
-    var wasmModule = null, wasmState = null;
+    var wasmModule = null, wasmState = null, lastArenaWasm = false;
 
     function buildWasmModule() {
         function uleb(n) { var o = []; do { var b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); } while (n); return o; }
@@ -491,8 +491,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         return new WebAssembly.Module(wasmBytes);
     }
 
-    function getArena(requiredBytes) {
-        if (!forcePureJs && typeof WebAssembly === 'object' && WebAssembly && typeof WebAssembly.Module === 'function') {
+    function getArena(requiredBytes, pureOnly) {
+        if (!pureOnly && !forcePureJs && typeof WebAssembly === 'object' && WebAssembly && typeof WebAssembly.Module === 'function') {
             try {
                 var neededPages = Math.ceil(requiredBytes / 65536);
                 if (!wasmState) {
@@ -549,7 +549,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         };
     }
 
-    function initArgon2Ctx(spec) {
+    function initArgon2Ctx(spec, pureOnly) {
         var P = spec.P, S = spec.S, K = spec.K, X = spec.X;
         var m = spec.m, t = spec.t, p = spec.p, T = spec.T;
         var yType = 2, version = 0x13;
@@ -570,7 +570,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             var totalBlocks = 4 * p * Math.floor(m / (4 * p));
             var laneLen = totalBlocks / p, sliceLen = laneLen / 4;
             var baseScratch = totalBlocks * 1024;
-            arena = getArena(baseScratch + 6144);
+            arena = getArena(baseScratch + 6144, pureOnly);
             var memU8 = arena.u8;
             memU8.fill(0, baseScratch, baseScratch + 6144);
 
@@ -695,11 +695,12 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         return { P: bytes[0], S: bytes[1], K: bytes[2], X: bytes[3], m: m, t: t, p: p, T: T };
     }
 
-    function argon2idSync(params) {
+    function argon2idSync(params, pureOnly) {
         var spec = validateArgon2Params(params);
         var ctx;
         try {
-            ctx = initArgon2Ctx(spec);
+            ctx = initArgon2Ctx(spec, pureOnly);
+            lastArenaWasm = ctx.arena.isWasm;
             for (var pass = 0; pass < ctx.t; pass++) {
                 for (var slice = 0; slice < 4; slice++) {
                     runArgon2Slice(ctx, pass, slice);
@@ -806,15 +807,16 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     /* ---------- FIPS 140-3 Style Power-On Self-Test (KAT) ---------- */
-    var selfTestPassed = false;
-    function runSelfTest() {
-        if (selfTestPassed) return;
+    var selfTestPassed = false, pureJsTested = false;
+    function runSelfTest(pureOnly) {
+        if (pureOnly ? pureJsTested : selfTestPassed) return;
         var p = new Uint8Array(32).fill(1), s = new Uint8Array(16).fill(2);
         var k = new Uint8Array(8).fill(3), x = new Uint8Array(12).fill(4);
         var tag, tcSalt, tcIkm, prk;
         try {
             // 1. RFC 9106 §5.3 Argon2id KAT
-            tag = argon2idSync({ password: p, salt: s, secret: k, ad: x, memoryKiB: 32, passes: 3, parallelism: 4, tagLength: 32 });
+            tag = argon2idSync({ password: p, salt: s, secret: k, ad: x, memoryKiB: 32, passes: 3, parallelism: 4, tagLength: 32 }, pureOnly);
+            var viaWasm = lastArenaWasm;
             var expectedA2 = [
                 0x0d,0x64,0x0d,0xf5,0x8d,0x78,0x76,0x6c,0x08,0xc0,0x37,0xa3,0x4a,0x8b,0x53,0xc9,
                 0xd0,0x1e,0xf0,0x45,0x2d,0x75,0xb6,0x5e,0xb5,0x25,0x20,0xe9,0x6b,0x01,0xe6,0x59
@@ -831,7 +833,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             for (var j = 0; j < 8; j++) {
                 if (prk[j] !== expectedPrk8[j]) throw new Error('KAT_SHA256_FAILED');
             }
-            selfTestPassed = true;
+            if (!viaWasm) pureJsTested = true;
+            if (!pureOnly) selfTestPassed = true;
         } finally {
             zeroize(p); zeroize(s); zeroize(k); zeroize(x);
             zeroize(tag); zeroize(tcSalt); zeroize(tcIkm); zeroize(prk);
@@ -979,6 +982,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     parallelism: inp.tierSpec.parallelism,
                     tagLength: 32
                 });
+                // 首次自检只覆盖当时的引擎；本次若由 WASM 降级为纯 JS，先补测该压缩核再放行。
+                if (!lastArenaWasm) runSelfTest(true);
                 zeroize(salt); salt = null;
             }
             zeroize(inp.masterBytes);
