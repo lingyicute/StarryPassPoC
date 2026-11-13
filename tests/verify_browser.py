@@ -445,6 +445,11 @@ async def test_malformed_results(browser, url):
             await page.evaluate('data => __workers.at(-1).reply(data)', {'id': sent[-1]['id'], **data})
             check(not await page.is_enabled('#copy-btn') and await page.is_hidden('#derive-bar')
                   and '派生失败' in await page.inner_text('#password-output'), 'malformed Worker result fails closed')
+        await fill(page, code='self-test-failure'); await page.clock.run_for(300)
+        await page.evaluate('data => __workers.at(-1).reply(data)',
+                            {'id': (await requests(page))[-1]['id'], 'ok': False, 'error': 'KAT_ARGON2ID_FAILED'})
+        check('自检未通过' in await page.inner_text('#password-output') and not await page.is_enabled('#copy-btn'),
+              'a failed self-test is reported as such instead of asking for a retry')
         for mode, bad in [('alnum', '!' * 16), ('pin', 'ABCDEF')]:
             await page.click(f'#mode-chips [data-mode={mode}]'); await page.clock.run_for(300)
             await reply(page, (await requests(page))[-1], bad)
