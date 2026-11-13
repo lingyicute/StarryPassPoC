@@ -269,8 +269,12 @@ check(() => assert.equal(
     const messages = [];
     const worker = { postMessage(msg) { messages.push(msg); } };
     factory(worker, false);
-    const deriveEnv = { ...request, id: 101, type: 'derive', get code() { this.id = 999; return request.code; } };
+    const deriveEnv = { ...request, id: 101, type: 'derive', heartbeat: true, get code() { this.id = 999; return request.code; } };
     worker.onmessage({ data: deriveEnv });
+    // 结果之前每条 lane 一次进度心跳（标准档 3 轮 × 4 片 × 4 lane），id 同样取自消息快照。
+    const beats = messages.splice(0, messages.length - 1);
+    check(() => assert.equal(beats.length, 3 * 4 * 4));
+    check(() => assert.ok(beats.every((m) => m.id === 101 && m.type === 'progress')));
     check(() => assert.equal(messages[0].id, 101));
     check(() => assert.equal(messages[0].ok, true));
     const wipeEnv = { id: 102, type: 'wipe' };
@@ -282,5 +286,18 @@ check(() => assert.equal(
     check(() => assert.equal(messages[2].id, 103));
     check(() => assert.equal(messages[2].ok, false));
     check(() => assert.equal(messages[2].error, 'BAD_ENVELOPE'));
+    // 心跳发送失败不得中断派生；页面未声明 heartbeat（旧页面）或命中会话缓存时不发心跳。
+    const flaky = { sent: [], postMessage(msg) { if (msg.type === 'progress') throw new Error('CHANNEL_BUSY'); this.sent.push(msg); } };
+    factory(flaky, false);
+    flaky.onmessage({ data: { ...request, id: 201, type: 'derive', heartbeat: true } });
+    check(() => assert.deepEqual(flaky.sent, [{ id: 201, ok: true, password: 'WueNKY^SRHRh4!DL', cached: false }]));
+    const quiet = { sent: [], postMessage(msg) { this.sent.push(msg); } };
+    factory(quiet, false);
+    quiet.onmessage({ data: { ...request, id: 301, type: 'derive' } });
+    check(() => assert.deepEqual(quiet.sent.map((m) => m.id + ':' + m.ok), ['301:true']));
+    quiet.sent.length = 0;
+    quiet.onmessage({ data: { ...request, id: 302, type: 'derive', counter: 2, heartbeat: true } });
+    check(() => assert.equal(quiet.sent.length, 1));
+    check(() => assert.equal(quiet.sent[0].cached, true));
 }
 console.log(`PASS core: ${checks} parameter, engine, cache and cleanup checks`);
