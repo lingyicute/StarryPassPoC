@@ -120,4 +120,10 @@ assert.equal(context.shortestPeriod([]), 0);
 assert.equal(estimate('tidal basin'.repeat(4)).bits, estimate('tidal basin').bits + 2, 'four cycles add log2(4) bits');
 assert.ok(estimate('tidal basin at dawn tidal').bits > estimate('tidal basin at dawn').bits,
     'a partial repeat is still scored per character');
+// A one-character code never triggers the contains-code warning, even when that
+// character is astral (UTF-16 length 2); a two-character code still does.
+const codeWarning = '弱 · 主密码勿含代号';
+assert.notEqual(estimate(long + '猫', '猫').label, codeWarning);
+assert.notEqual(estimate(long + '😀', '😀').label, codeWarning);
+assert.equal(estimate(long + '😀😀', '😀😀').label, codeWarning);
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
