@@ -520,6 +520,31 @@ THEME_PROBE = """(() => {
 })();"""
 
 
+async def test_counter_not_restored(browser, url, state):
+    # no-store 会让 Chromium 整体跳过表单恢复；换成 no-cache 才能复现“只恢复序号”的回归。
+    previous = state.get('allow_bfcache')
+    state['allow_bfcache'] = True
+    context = await browser.new_context(ignore_https_errors=True)
+    page = await context.new_page()
+    try:
+        await page.goto(url)
+        await page.evaluate("document.getElementById('policy').open = true")
+        await page.click('#mode-chips [data-mode="alnum"]')
+        await page.fill('#counter-input', '3')
+        await page.goto(url.replace('index.html', 'assets/img/icons/192.png'))
+        await page.go_back()
+        await page.wait_for_selector('#counter-input', state='attached')
+        await page.wait_for_timeout(300)
+        check(await page.get_attribute('#mode-chips [data-mode="full"]', 'aria-pressed') == 'true',
+              'history navigation reloaded the page with the default policy')
+        check(await page.input_value('#counter-input') == '1',
+              'form restoration cannot bring back the rotation counter alone')
+    finally:
+        state['allow_bfcache'] = previous
+        await context.close()
+    print('PASS browser: rotation counter is not restored without the rest of the policy')
+
+
 async def test_theme_first_paint_and_system_follow(browser, url):
     context = await browser.new_context(ignore_https_errors=True, color_scheme='dark')
     page = await context.new_page()
@@ -773,6 +798,7 @@ async def main():
                     await test_local_fallback(browser, url)
                     await test_copy_and_theme(browser, url)
                     await test_counter_accessible_name(browser, url)
+                    await test_counter_not_restored(browser, url, state)
                     await test_theme_first_paint_and_system_follow(browser, url)
                     await test_malformed_results(browser, url)
                     await test_real_crypto(browser, url)
