@@ -34,7 +34,7 @@ The same master password + a site code always produce the same high-entropy pass
 - **Password synthesis**: unbiased rejection sampling with at most 128 retries, followed by a deterministic fallback construction; by default at least one upper-case letter, one lower-case letter, one digit and one symbol are guaranteed.
 - **Implementation**: a WASM i64 compression kernel written in transparent symbolic assembly, plus a pure-JS fallback. On the first derivation it self-tests the RFC 9106 §5.3 Argon2id tag and the first 8 bytes of the RFC 5869 TC1 PRK; derivation is refused on failure. If a later derivation degrades from WASM to pure JS, the pure-JS kernel is self-tested before its result is used.
 - **Zero persistent storage**: the master password and session key live only in memory; the static-asset cache and theme preference contain no sensitive data.
-  - The session key uses a single-slot cache protected by a CSPRNG random mask. It is replaced automatically when a later successful derivation changes the master password / code / tier, or cleared by `wipeSession()`; when no CSPRNG is available, no session key is retained.
+  - The session key uses a single-slot cache. A hit is decided by an HMAC tag keyed with a CSPRNG nonce, so the cache never stores the master password. The cached key is replaced automatically when a later successful derivation changes the master password / code / tier, or cleared by `wipeSession()`; when no CSPRNG is available, no session key is retained.
   - Controlled sensitive byte buffers and the WASM linear-memory workspace are overwritten with zeros in `finally` blocks after use and on error paths.
 
 ## Protocol details and runtime behaviour
