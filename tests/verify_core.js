@@ -174,6 +174,33 @@ fallback.wipeSession();
     flaky.wipeSession();
 }
 
+// 标准档大小的 WASM 内存被拒同样只影响该次请求：内存恢复后重新启用 WASM。
+// 但自检本身落在纯 JS 上时，未经自检的 WASM 不得在之后启用。
+{
+    let deny = true;
+    const tightWasm = {
+        Module: WebAssembly.Module,
+        Instance: WebAssembly.Instance,
+        Memory: function (descriptor) {
+            if (deny) throw new RangeError('WASM memory denied');
+            return new WebAssembly.Memory(descriptor);
+        }
+    };
+    const standardBytes = 65536 * 1024 + 6144;
+    const tight = loadCore({ WebAssembly: tightWasm, console: { warn() {} } })(null, false);
+    check(() => assert.equal(tight._test.getArena(standardBytes).isWasm, false, 'denied standard-tier request degrades this time'));
+    deny = false;
+    check(() => assert.equal(tight._test.getArena(standardBytes).isWasm, true, 'standard-tier WASM recovers once memory is available'));
+    tight.wipeSession();
+
+    deny = true;
+    const untested = loadCore({ WebAssembly: tightWasm, console: { warn() {} } })(null, false);
+    check(() => assert.equal(untested.deriveSync(request).password, 'WueNKY^SRHRh4!DL'));
+    deny = false;
+    check(() => assert.equal(untested._test.getArena(40 * 1024).isWasm, false, 'WASM that never passed the KAT stays disabled'));
+    untested.wipeSession();
+}
+
 // WASM 通过自检后运行期降级为纯 JS：必须先对纯 JS 压缩核补做 KAT，且只补一次。
 {
     const katBytes = 32 * 1024 + 6144;

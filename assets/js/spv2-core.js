@@ -488,18 +488,21 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     function getArena(requiredBytes, pureOnly) {
         if (!pureOnly && !forcePureJs && typeof WebAssembly === 'object' && WebAssembly && typeof WebAssembly.Module === 'function') {
+            var allocating = false;
             try {
                 var neededPages = Math.ceil(requiredBytes / 65536);
                 if (!wasmState) {
                     var mod = wasmModule || (wasmModule = buildWasmModule());
                     var initPages = Math.max(neededPages, 2);
                     var mem;
+                    allocating = true;
                     try {
                         mem = new WebAssembly.Memory({ initial: initPages, maximum: Math.max(initPages, 4100) });
                     } catch (e) {
                         if (initPages >= 4100) throw e;
                         mem = new WebAssembly.Memory({ initial: initPages });
                     }
+                    allocating = false;
                     var inst = new WebAssembly.Instance(mod, { e: { m: mem } });
                     wasmState = { mod: mod, mem: mem, pages: initPages, fn: inst.exports.c };
                 } else if (wasmState.pages < neededPages) {
@@ -518,9 +521,9 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     if (wasmState.mem) new Uint8Array(wasmState.mem.buffer).fill(0);
                     wasmState = null;
                     if (!isRangeErr) forcePureJs = true;
-                } else if (!(requiredBytes >= 100 * 1048576 && isRangeErr)) {
-                    // 仅编译/实例化失败才永久停用 WASM；超大内存被拒（RangeError）只影响本次请求，
-                    // 否则一次失败的极高档会让之后的标准档也一直退回慢速纯 JS。
+                } else if (!(allocating && isRangeErr)) {
+                    // 仅编译/实例化失败才永久停用 WASM；内存分配被拒（RangeError）只影响本次请求，
+                    // 否则一次内存不足会让之后的派生（含释放内存后的重试）一直退回慢速纯 JS。
                     forcePureJs = true;
                 }
                 if (typeof console === 'object' && console && typeof console.warn === 'function') {
@@ -829,7 +832,11 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             for (var j = 0; j < 8; j++) {
                 if (prk[j] !== expectedPrk8[j]) throw new Error('KAT_SHA256_FAILED');
             }
-            if (!viaWasm) pureJsTested = true;
+            if (!viaWasm) {
+                pureJsTested = true;
+                // 默认引擎的自检落在纯 JS 上（WASM 不可用或内存被拒）：未经自检的 WASM 此后不再启用。
+                if (!pureOnly) forcePureJs = true;
+            }
             if (!pureOnly) selfTestPassed = true;
         } finally {
             zeroize(p); zeroize(s); zeroize(k); zeroize(x);
