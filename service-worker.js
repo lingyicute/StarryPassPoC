@@ -1,4 +1,4 @@
-const TIMESTAMP = "1793680001";
+const TIMESTAMP = "1793680002";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 const SHELL_PATH = new URL(SHELL_URL).pathname;
@@ -23,7 +23,8 @@ const STATIC_URLS = new Set(PRECACHE_URLS.map((url) => new URL(url, APP_ROOT).hr
 self.addEventListener("install", (event) => {
     event.waitUntil(
         caches.open(VERSION)
-            .then((cache) => cache.addAll(PRECACHE_URLS.map((url) =>
+            // "./" 与 "./index.html" 是同一份首页，只下载后者；根路径离线时同样回退到它。
+            .then((cache) => cache.addAll(PRECACHE_URLS.filter((url) => url !== "./").map((url) =>
                 new Request(new URL(url, APP_ROOT), { cache: "reload" }))))
             .then(() => self.skipWaiting())
     );

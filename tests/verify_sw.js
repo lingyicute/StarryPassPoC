@@ -85,6 +85,9 @@ async function checkText(e, expected) {
     const install = event('install');
     await finish(install);
     check(() => assert.ok(installs.some((r) => r.url.endsWith('/manifest.webmanifest'))));
+    // "./" 与 "./index.html" 是同一份首页：安装时只下载一次。
+    check(() => assert.deepEqual(installs.filter((r) => /\/(index\.html)?$/.test(new URL(r.url).pathname))
+        .map((r) => new URL(r.url).pathname.split('/').pop()), ['index.html']));
     check(() => assert.ok(installs.some((r) => r.url.endsWith('/assets/img/icons/192.png'))));
     // iOS 添加到主屏幕只认 apple-touch-icon；图标必须声明且随安装预缓存。
     const appleHref = /<link\s+rel="apple-touch-icon"[^>]*\shref="\.\/([^"]+)"/.exec(
