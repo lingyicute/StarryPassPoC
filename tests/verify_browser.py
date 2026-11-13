@@ -308,6 +308,17 @@ async def test_timeout_and_reset(browser, url):
         await page.evaluate("id => __lateHandler({data: {id, ok:true, password:'OLD'}})", first['id'])
         await reply(page, latest)
         check(await page.inner_text('#password-output') == FAKE_PASSWORD, 'late old Worker cannot destroy new task')
+        await page.fill('#code-input', 'slow-but-alive'); await page.clock.run_for(300)
+        slow = (await requests(page))[-1]
+        check(slow.get('heartbeat') is True, 'derive requests opt in to progress heartbeats')
+        for _ in range(3):
+            await page.clock.run_for(50000)
+            await page.evaluate("id => __workers.at(-1).reply({id, type: 'progress'})", slow['id'])
+        check(not await page.evaluate('__workers.at(-1).terminated') and await page.is_visible('#derive-bar')
+              and await page.evaluate('__workers.length') == 2, 'progress heartbeats keep a slow Worker alive past 60 s')
+        await reply(page, slow)
+        check(await page.inner_text('#password-output') == FAKE_PASSWORD and await page.is_hidden('#derive-bar'),
+              'slow Worker result is accepted after heartbeats')
         await page.fill('#code-input', 'will-timeout'); await page.clock.run_for(300)
         await page.clock.run_for(60001)
         check(await page.evaluate('__workers.at(-1).terminated'), 'latest timed-out Worker also terminates')

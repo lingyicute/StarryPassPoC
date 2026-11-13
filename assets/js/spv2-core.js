@@ -594,7 +594,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
     }
 
-    function runArgon2Slice(ctx, pass, slice) {
+    function runArgon2Slice(ctx, pass, slice, onLane) {
         var p = ctx.p, t = ctx.t, laneLen = ctx.laneLen, sliceLen = ctx.sliceLen;
         var baseScratch = ctx.baseScratch;
         var zeroPtr = baseScratch, inputPtr = baseScratch + 1024, tmpPtr = baseScratch + 2048;
@@ -645,6 +645,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     rzPtr
                 );
             }
+            if (onLane) onLane();
         }
     }
 
@@ -690,7 +691,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         return { P: bytes[0], S: bytes[1], K: bytes[2], X: bytes[3], m: m, t: t, p: p, T: T };
     }
 
-    function argon2idSync(params, pureOnly) {
+    function argon2idSync(params, pureOnly, onLane) {
         var spec = validateArgon2Params(params);
         var ctx;
         try {
@@ -698,7 +699,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             lastArenaWasm = ctx.arena.isWasm;
             for (var pass = 0; pass < ctx.t; pass++) {
                 for (var slice = 0; slice < 4; slice++) {
-                    runArgon2Slice(ctx, pass, slice);
+                    runArgon2Slice(ctx, pass, slice, onLane);
                 }
             }
             return finalizeArgon2Ctx(ctx);
@@ -953,7 +954,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
     }
 
-    function deriveSync(req) {
+    function deriveSync(req, onProgress) {
         var inp = null, reqTag = null, salt = null, sk = null, usedCache = false, completed = false;
         try {
             runSelfTest();
@@ -976,7 +977,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     passes: inp.tierSpec.passes,
                     parallelism: inp.tierSpec.parallelism,
                     tagLength: 32
-                });
+                }, false, typeof onProgress === 'function' ? onProgress : null);
                 // 首次自检只覆盖当时的引擎；本次若由 WASM 降级为纯 JS，先补测该压缩核再放行。
                 if (!lastArenaWasm) runSelfTest(true);
                 zeroize(salt); salt = null;
@@ -1003,11 +1004,12 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     if (workerGlobal && typeof workerGlobal.postMessage === 'function') {
         workerGlobal.onmessage = function (ev) {
-            var data, id, type;
+            var data, id, type, heartbeat;
             try {
                 data = (ev && ev.data) || {};
                 id = data.id;
                 type = data.type;
+                heartbeat = data.heartbeat === true;
             } catch (err) {
                 workerGlobal.postMessage({ id: id, ok: false, error: err && err.message ? err.message : 'DERIVE_ERROR' });
                 return;
@@ -1019,7 +1021,12 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             }
             if (type === 'derive') {
                 try {
-                    var res = deriveSync(data);
+                    // 每条 lane 完成后报告一次进度：页面看门狗据此区分“慢”与“卡死”，
+                    // 无 JIT 的纯 JS 派生可远超 60 秒；心跳发送失败不影响派生。
+                    // 仅在页面声明 heartbeat 时发送：缓存的旧页面会把未知消息当成失败结果。
+                    var res = deriveSync(data, heartbeat ? function () {
+                        try { workerGlobal.postMessage({ id: id, type: 'progress' }); } catch (_) {}
+                    } : null);
                     workerGlobal.postMessage({ id: id, ok: true, password: res.password, cached: res.cached });
                 } catch (err) {
                     workerGlobal.postMessage({ id: id, ok: false, error: err && err.message ? err.message : 'DERIVE_ERROR' });

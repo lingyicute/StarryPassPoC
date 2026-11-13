@@ -1289,6 +1289,21 @@
                 watchdogTimer = null;
             }
 
+            // 看门狗检测的是“60 秒内没有任何进展”：Worker 的进度心跳会重新计时，
+            // 无 JIT 的纯 JS 派生（如 iOS 锁定模式）可以慢，但不会被误判为卡死。
+            function armWatchdog(target, payload) {
+                clearWatchdog();
+                watchdogTimer = setTimeout(function () {
+                    if (worker !== target || currentPayload !== payload) return;
+                    var next = pendingPayload;
+                    pendingPayload = null;
+                    stopWorker();  // 先终止卡住的计算，不能把新任务继续排到同一个 Worker 后面。
+                    if (isCurrent(next)) dispatch(next);
+                    else if (isCurrent(payload)) showEmpty('派生超时，请重试');
+                    else setBusy(!!debounceTimer);
+                }, 60000);
+            }
+
             function isCurrent(payload) {
                 return payload && payload.id === deriveId
                     && payload.master === masterInput.value && payload.code === codeInput.value
@@ -1338,16 +1353,7 @@
                         fallbackToLocal();
                         return;
                     }
-                    clearWatchdog();
-                    watchdogTimer = setTimeout(function () {
-                        if (worker !== target || currentPayload !== payload) return;
-                        var next = pendingPayload;
-                        pendingPayload = null;
-                        stopWorker();  // 先终止卡住的计算，不能把新任务继续排到同一个 Worker 后面。
-                        if (isCurrent(next)) dispatch(next);
-                        else if (isCurrent(payload)) showEmpty('派生超时，请重试');
-                        else setBusy(!!debounceTimer);
-                    }, 60000);
+                    armWatchdog(target, payload);
                     return;
                 }
                 try {
@@ -1405,6 +1411,7 @@
                     if (data.type === 'wiped') return;
                     var payload = currentPayload;
                     if (!payload || data.id !== payload.id) return;
+                    if (data.type === 'progress') { armWatchdog(target, payload); return; }
                     try {
                         if (isCurrent(payload)) {
                             if (data.ok === true) applyPassword(data.password, payload);
@@ -1450,7 +1457,8 @@
                 if (!invalidateResult(composing) || composing) return;
                 requestDerive({
                     id: deriveId, type: 'derive', master: masterInput.value, code: codeInput.value,
-                    tier: state.tier, counter: state.counter, length: effectiveLength(), mode: state.mode
+                    tier: state.tier, counter: state.counter, length: effectiveLength(), mode: state.mode,
+                    heartbeat: true  // 声明本页能识别进度心跳；旧页面不带此标记，核心就不会向其发送。
                 });
             }
 
