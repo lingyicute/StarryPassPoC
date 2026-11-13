@@ -368,6 +368,8 @@ async def test_copy_and_theme(browser, url):
     try:
         await fill(page); await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
+        check(await page.get_attribute('#password-output', 'translate') == 'no',
+              'generated password is excluded from page translation')
         await page.evaluate("""() => {
             window.__copied = []; window.__reads = 0; window.__execCopies = 0;
             document.execCommand = () => { __execCopies++; return true; };
@@ -382,6 +384,8 @@ async def test_copy_and_theme(browser, url):
         check(await page.inner_text('#copy-label') == '复制密码'
               and not await page.evaluate("document.getElementById('snackbar').classList.contains('is-visible')"),
               'old async copy cannot mark a newer result copied or pop a stale snackbar')
+        check(await page.get_attribute('#password-output', 'translate') is None,
+              'placeholder text stays translatable')
         check(await page.evaluate('__copied[0]') == FAKE_PASSWORD, 'copy captures the clicked result')
         await page.clock.run_for(45001)
         check(await page.evaluate('__reads') == 0, 'no unsolicited clipboard read or unreliable auto-wipe')

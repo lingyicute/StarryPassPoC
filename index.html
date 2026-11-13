@@ -1222,6 +1222,7 @@
 
             function showEmpty(placeholder) {
                 output.textContent = placeholder;
+                output.removeAttribute('translate');
                 output.classList.add('password--empty');
                 copyBtn.disabled = true;
                 clearTimeout(copyResetTimer);
@@ -1255,6 +1256,8 @@
                     showEmpty(errorText(null));
                     return;
                 }
+                // 整页翻译会把文本节点发往翻译服务并改写内容：口令不得参与，占位提示仍可翻译。
+                output.setAttribute('translate', 'no');
                 output.textContent = pwd;
                 output.classList.remove('password--empty');
                 copyBtn.disabled = false;
