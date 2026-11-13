@@ -983,6 +983,27 @@
                 return n ? n - fail[n - 1] : 0;
             }
 
+            // Longest run from `start` that repeats a unit at least twice, found in a bounded window and
+            // then extended. Returned only when collapsing it is clearly cheaper than per-character
+            // scoring, where every further character adds at least 0.5 bits.
+            var RUN_FAIL = new Int32Array(256);
+            function repeatedRun(cps, start) {
+                var n = cps.length, w = Math.min(n - start, RUN_FAIL.length), k = 0, best = 0, period = 0, p, hit = false;
+                // Cheap necessary condition first: the unit's first and last characters recur one period later.
+                for (p = 1; p * 2 <= w && !hit; p++) hit = cps[start + p] === cps[start] && cps[start + 2 * p - 1] === cps[start + p - 1];
+                if (!hit) return null;
+                for (var j = 1; j < w; j++) {
+                    while (k > 0 && cps[start + j] !== cps[start + k]) k = RUN_FAIL[k - 1];
+                    if (cps[start + j] === cps[start + k]) k++;
+                    RUN_FAIL[j] = k;
+                    p = j + 1 - k;
+                    if (p * 2 <= j + 1) { best = j + 1; period = p; }
+                }
+                if (!best) return null;
+                while (start + best < n && cps[start + best] === cps[start + best - period]) best++;
+                return Math.log2(best / period) < 0.5 * (best - period) ? { period: period, length: best } : null;
+            }
+
             function estimateCrackResistance(master, code, tier, mode, length) {
                 var m = String(master || '').normalize('NFC');
                 var c = String(code || '').trim().normalize('NFC');
@@ -1015,8 +1036,18 @@
                 // 否则超长重复串会被逐字符累加成“强”。
                 var unitLen = shortestPeriod(cps);
                 if (unitLen * 2 > cps.length) unitLen = cps.length;
+                // A repeat inside a longer string (abab...abX) is collapsed the same way; otherwise one
+                // extra character would turn a weak periodic master into the top rating.
+                var n = cps.length, whole = unitLen < n, run, unitEnd = 0, runEnd = 0, repeatBits = 0;
                 var bits = 0, seen = Object.create(null), prevCh, prevCp, count, baseBits;
-                for (i = 0; i < unitLen; i++) {
+                for (i = 0; i < n; i++) {
+                    if (i >= runEnd) {
+                        run = whole ? { period: unitLen, length: n } : repeatedRun(cps, i);
+                        if (run) {
+                            unitEnd = i + run.period; runEnd = i + run.length;
+                            repeatBits += Math.log2(run.length / run.period);
+                        }
+                    }
                     ch = cps[i]; cp = ch.codePointAt(0);
                     if (cp >= 32 && cp <= 126) baseBits = asciiBits;
                     else if ((cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0x20000 && cp <= 0x2ebef)) baseBits = 7.5;
@@ -1030,8 +1061,9 @@
                     else if (count === 1) bits += baseBits * 0.65;
                     else bits += baseBits * 0.35;
                     seen[ch] = count + 1;
+                    if (i + 1 === unitEnd && runEnd > unitEnd) i = runEnd - 1;  // skip the repeats of the unit
                 }
-                bits += Math.log2(cps.length / unitLen);
+                bits += repeatBits;
                 if (tier === 'paranoid') bits += 3;
                 if (mode === 'pin') {
                     if (bits < 44 || outBits <= 0) return { level: 1, label: '弱 · 主密码过短', bits: Math.round(Math.min(bits, outBits)) };
