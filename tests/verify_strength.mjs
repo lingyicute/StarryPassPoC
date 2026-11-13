@@ -126,4 +126,14 @@ const codeWarning = '弱 · 主密码勿含代号';
 assert.notEqual(estimate(long + '猫', '猫').label, codeWarning);
 assert.notEqual(estimate(long + '😀', '😀').label, codeWarning);
 assert.equal(estimate(long + '😀😀', '😀😀').label, codeWarning);
+// A repeat inside a longer string is collapsed like a fully periodic one: one extra
+// character must not turn a weak periodic master into the top rating.
+for (const value of ['ab'.repeat(40) + 'c', 'x' + 'ab'.repeat(40), 'a'.repeat(200) + 'b',
+    'ab'.repeat(200) + 'cd'.repeat(200), '星河'.repeat(30) + '。']) {
+    assert.equal(estimate(value).level, 1, `repeated run scored per character: ${value.slice(0, 8)}`);
+}
+assert.equal(estimate('xhello world hello world y').bits, estimate('xhello world y').bits + 1,
+    'two cycles inside a longer string add log2(2) bits');
+assert.equal(estimate('q'.repeat(6) + 'W8#k mountain').bits, estimate('q'.repeat(5) + 'W8#k mountain').bits + 1,
+    'short repeats keep the per-character scoring');
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
