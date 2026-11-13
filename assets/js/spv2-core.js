@@ -404,12 +404,14 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
         function sec(id, body) { return [id].concat(uleb(body.length), body); }
         var OP = {
-            LOOP: 0x03, IF: 0x04, END: 0x0b, BR_IF: 0x0d, CALL: 0x10,
+            LOOP: 0x03, IF: 0x04, END: 0x0b, BR_IF: 0x0d,
             LGET: 0x20, LSET: 0x21, LTEE: 0x22, I64_LD: 0x29, I64_ST: 0x37,
             I32_C: 0x41, I64_C: 0x42, I32_LTU: 0x49, I32_ADD: 0x6a, I32_SHL: 0x74,
             I64_ADD: 0x7c, I64_MUL: 0x7e, I64_AND: 0x83, I64_XOR: 0x85, I64_SHL: 0x86, I64_ROTR: 0x8a
         };
-        var A = 5, B = 6, C = 7, D = 8, MASK = 9, PA = 10, PB = 11, PC = 12, PD = 13;
+        // 每轮 P 置换先把 16 个字装入局部变量，8 次 G 全部在局部变量上完成后再写回，
+        // 省去逐次 G 的函数调用与重复的内存读写。
+        var I = 5, BASE = 6, ZPTR = 7, T64 = 8, MASK = 9, V0 = 10;
         function step(X, Y, Z, R) {
             return [
                 OP.LGET, X, OP.LGET, Y, OP.I64_ADD,
@@ -420,30 +422,23 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                 OP.LGET, Z, OP.I64_XOR, OP.I64_C, R, OP.I64_ROTR, OP.LSET, Z
             ];
         }
-        var fn0 = [
-            2, 5, 0x7e, 4, 0x7f,
-            OP.I64_C, 0xff, 0xff, 0xff, 0xff, 0x0f, OP.LSET, MASK,
-            OP.LGET, 0, OP.LGET, 1, OP.I32_ADD, OP.LTEE, PA, OP.I64_LD, 3, 0, OP.LSET, A,
-            OP.LGET, 0, OP.LGET, 2, OP.I32_ADD, OP.LTEE, PB, OP.I64_LD, 3, 0, OP.LSET, B,
-            OP.LGET, 0, OP.LGET, 3, OP.I32_ADD, OP.LTEE, PC, OP.I64_LD, 3, 0, OP.LSET, C,
-            OP.LGET, 0, OP.LGET, 4, OP.I32_ADD, OP.LTEE, PD, OP.I64_LD, 3, 0, OP.LSET, D
-        ].concat(
-            step(A, B, D, 32), step(C, D, B, 24), step(A, B, D, 16), step(C, D, B, 63),
-            [
-                OP.LGET, PA, OP.LGET, A, OP.I64_ST, 3, 0,
-                OP.LGET, PB, OP.LGET, B, OP.I64_ST, 3, 0,
-                OP.LGET, PC, OP.LGET, C, OP.I64_ST, 3, 0,
-                OP.LGET, PD, OP.LGET, D, OP.I64_ST, 3, 0, OP.END
-            ]
-        );
-        var I = 5, BASE = 6, ZPTR = 7, T64 = 8;
-        function callG(a, b, c, d) {
-            return [OP.LGET, BASE, OP.I32_C].concat(sleb(a * 8), [OP.I32_C], sleb(b * 8), [OP.I32_C], sleb(c * 8), [OP.I32_C], sleb(d * 8), [OP.CALL, 0]);
+        function gRound(a, b, c, d) {
+            a += V0; b += V0; c += V0; d += V0;
+            return [].concat(step(a, b, d, 32), step(c, d, b, 24), step(a, b, d, 16), step(c, d, b, 63));
         }
-        var rowCalls = [].concat(callG(0,4,8,12),callG(1,5,9,13),callG(2,6,10,14),callG(3,7,11,15),callG(0,5,10,15),callG(1,6,11,12),callG(2,7,8,13),callG(3,4,9,14));
-        var colCalls = [].concat(callG(0,32,64,96),callG(1,33,65,97),callG(16,48,80,112),callG(17,49,81,113),callG(0,33,80,113),callG(1,48,81,96),callG(16,49,64,97),callG(17,32,65,112));
+        function permuteP(words) {
+            var code = [], k;
+            for (k = 0; k < 16; k++) code = code.concat([OP.LGET, BASE, OP.I64_LD, 3], uleb(words[k] * 8), [OP.LSET, V0 + k]);
+            code = code.concat(gRound(0,4,8,12), gRound(1,5,9,13), gRound(2,6,10,14), gRound(3,7,11,15),
+                               gRound(0,5,10,15), gRound(1,6,11,12), gRound(2,7,8,13), gRound(3,4,9,14));
+            for (k = 0; k < 16; k++) code = code.concat([OP.LGET, BASE, OP.LGET, V0 + k, OP.I64_ST, 3], uleb(words[k] * 8));
+            return code;
+        }
+        var rowPerm = permuteP([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
+        var colPerm = permuteP([0,1,16,17,32,33,48,49,64,65,80,81,96,97,112,113]);
         var fn1 = [
-            2, 3, 0x7f, 1, 0x7e,
+            2, 3, 0x7f, 18, 0x7e,
+            OP.I64_C, 0xff, 0xff, 0xff, 0xff, 0x0f, OP.LSET, MASK,
             OP.LGET, 4, OP.I32_C].concat(sleb(1024), [OP.I32_ADD, OP.LSET, ZPTR,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
@@ -458,13 +453,13 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
                 OP.LGET, ZPTR, OP.LGET, I, OP.I32_C, 7, OP.I32_SHL, OP.I32_ADD, OP.LSET, BASE],
-                rowCalls, [
+                rowPerm, [
                 OP.LGET, I, OP.I32_C, 1, OP.I32_ADD, OP.LTEE, I, OP.I32_C, 8, OP.I32_LTU, OP.BR_IF, 0,
             OP.END,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
                 OP.LGET, ZPTR, OP.LGET, I, OP.I32_C, 4, OP.I32_SHL, OP.I32_ADD, OP.LSET, BASE],
-                colCalls, [
+                colPerm, [
                 OP.LGET, I, OP.I32_C, 1, OP.I32_ADD, OP.LTEE, I, OP.I32_C, 8, OP.I32_LTU, OP.BR_IF, 0,
             OP.END,
             OP.I32_C, 0, OP.LSET, I,
@@ -482,11 +477,11 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             OP.END, OP.END
         ]);
         var wasmBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00].concat(
-            sec(1, [2, 0x60, 5, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0, 0x60, 5, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0]),
+            sec(1, [1, 0x60, 5, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0]),
             sec(2, [1, 1, 0x65, 1, 0x6d, 0x02, 0x00, 1]),
-            sec(3, [2, 0, 1]),
-            sec(7, [1, 1, 0x63, 0x00, 1]),
-            sec(10, [2].concat(uleb(fn0.length), fn0, uleb(fn1.length), fn1))
+            sec(3, [1, 0]),
+            sec(7, [1, 1, 0x63, 0x00, 0]),
+            sec(10, [1].concat(uleb(fn1.length), fn1))
         ));
         return new WebAssembly.Module(wasmBytes);
     }
