@@ -508,6 +508,10 @@
             box-shadow: none;
             pointer-events: none;
         }
+        /* without color-mix() both declarations above are dropped and the button would keep its enabled primary look */
+        @supports not (color: color-mix(in srgb, red, blue)) {
+            .filled-button[disabled] { opacity: .38; }
+        }
         .filled-button.is-copied {
             background: var(--md-sys-color-primary-container);
             color: var(--md-sys-color-on-primary-container);
