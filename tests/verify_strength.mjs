@@ -126,6 +126,7 @@ const codeWarning = '弱 · 主密码勿含代号';
 assert.notEqual(estimate(long + '猫', '猫').label, codeWarning);
 assert.notEqual(estimate(long + '😀', '😀').label, codeWarning);
 assert.equal(estimate(long + '😀😀', '😀😀').label, codeWarning);
+assert.notEqual(estimate(long + 'i\u0307', '\u0130').label, codeWarning);
 // A repeat inside a longer string is collapsed like a fully periodic one: one extra
 // character must not turn a weak periodic master into the top rating.
 for (const value of ['ab'.repeat(40) + 'c', 'x' + 'ab'.repeat(40), 'a'.repeat(200) + 'b',

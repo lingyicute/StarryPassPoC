@@ -1034,8 +1034,8 @@
                 var len = Number(length);
                 var outBits = (Number.isFinite(len) && len > 0 ? len : 0) * Math.log2(poolSize);
                 var mLower = m.toLowerCase(), cLower = c.toLowerCase();
-                // Count code points: one astral character (e.g. an emoji) has length 2 but is still a one-character code.
-                if (Array.from(cLower).length >= 2 && mLower.indexOf(cLower) !== -1)
+                // Count code points before case folding: one astral character or İ (which lowercases to two code points) is still a one-character code.
+                if (Array.from(c).length >= 2 && mLower.indexOf(cLower) !== -1)
                     return { level: 1, label: '弱 · 主密码勿含代号', bits: Math.round(Math.min(16, outBits)) };
                 var dateRe = /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
                 var datePeriod = shortestPeriod(m);
