@@ -941,6 +941,13 @@
                 'starrypass':1,'huami':1,'flowerpassword':1
             };
             var KB_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+            var MAX_WEAK_ROOT_LEN = 0;
+            for (var weakKey in WEAK_ROOTS) {
+                if (Object.prototype.hasOwnProperty.call(WEAK_ROOTS, weakKey) && weakKey.length > MAX_WEAK_ROOT_LEN) {
+                    MAX_WEAK_ROOT_LEN = weakKey.length;
+                }
+            }
+            var WEAK_SUFFIX_RE = /[0-9!@#$%^&*()_+\-=[\]{};:'"\\|,.<>/?~`]/;
 
             // Check own keys only: Object.prototype names are not weak roots.
             function isWeakRoot(value) {
@@ -951,17 +958,25 @@
             }
 
             function hasWeakRoot(value) {
-                var stem = value, i, p;
-                // Strip BEFORE de-leeting so suffix digits do not turn into letters.
-                // Try every boundary to preserve digit-ending roots (e.g. abc123!), and
-                // fold pure repetitions (e.g. P@ssw0rd2026!P@ssw0rd2026!).
-                for (i = 0; ; i++) {
-                    if (isWeakRoot(stem)) return true;
-                    p = shortestPeriod(stem);
-                    if (p > 0 && p * 2 <= stem.length && hasWeakRoot(stem.slice(0, p))) return true;
-                    if (i >= 8 || !/[0-9!@#$%^&*()_+\-=[\]{};:'"\\|,.<>/?~`]/.test(stem.slice(-1))) return false;
-                    stem = stem.slice(0, -1);
+                var n = value.length;
+                if (!n) return false;
+                // 一次 KMP 即可 O(1) 查询任意前缀的最短循环节，并按前缀长度去重避免指数级递归。
+                var fail = prefixTable(value), seen = Object.create(null);
+                function check(len) {
+                    if (seen[len]) return false;
+                    seen[len] = 1;
+                    // Strip BEFORE de-leeting so suffix digits do not turn into letters.
+                    // Try every boundary to preserve digit-ending roots (e.g. abc123!), and
+                    // fold pure repetitions (e.g. P@ssw0rd2026!P@ssw0rd2026!).
+                    for (var i = 0; len > 0; i++, len--) {
+                        if (len <= MAX_WEAK_ROOT_LEN && isWeakRoot(value.slice(0, len))) return true;
+                        var p = len - fail[len - 1];
+                        if (p > 0 && p * 2 <= len && check(p)) return true;
+                        if (i >= 8 || !WEAK_SUFFIX_RE.test(value.charAt(len - 1))) return false;
+                    }
+                    return false;
                 }
+                return check(n);
             }
 
             function isKeyboardStep(a, b) {
@@ -974,15 +989,19 @@
                 return false;
             }
 
-            // KMP 前缀函数求最短循环节：对所有 i 满足 s[i] === s[i + p] 的最小 p。
-            function shortestPeriod(cps) {
+            // KMP 前缀函数：前缀 s[0..m-1] 的最短循环节为 m - fail[m - 1]。
+            function prefixTable(cps) {
                 var n = cps.length, fail = new Int32Array(n), k = 0;
                 for (var i = 1; i < n; i++) {
                     while (k > 0 && cps[i] !== cps[k]) k = fail[k - 1];
                     if (cps[i] === cps[k]) k++;
                     fail[i] = k;
                 }
-                return n ? n - fail[n - 1] : 0;
+                return fail;
+            }
+            function shortestPeriod(cps) {
+                var n = cps.length;
+                return n ? n - prefixTable(cps)[n - 1] : 0;
             }
 
             // Longest run from `start` that repeats a unit at least twice, found in a bounded window and

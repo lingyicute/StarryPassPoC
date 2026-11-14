@@ -152,4 +152,21 @@ for (const value of ['P@ssw0rd2026!'.repeat(2), 'Administrator2026!'.repeat(2),
 for (const dateVal of ['20000101'.repeat(2), '20120120', '20220220', '20120120'.repeat(2)]) {
     assert.deepEqual(estimate(dateVal), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
 }
+// Nested periodic suffix-strippable inputs must stay linear rather than exploding exponentially.
+{
+    let nested = '12!34@56#78$';
+    for (const sep of '%^&*()-_') {
+        const u = nested + sep;
+        nested = u + u + u.slice(0, 8);
+    }
+    const t0 = performance.now();
+    assert.equal(context.hasWeakRoot(nested), false);
+    assert.ok(performance.now() - t0 < 500, 'nested periodic hasWeakRoot stays fast');
+    let weakNested = 'p@ssw0rd!';
+    for (const sep of '1234') {
+        const u = weakNested + sep;
+        weakNested = u + u + u.slice(0, 4);
+    }
+    expectWeak(weakNested);
+}
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
