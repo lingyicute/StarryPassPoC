@@ -144,6 +144,17 @@ async function checkText(e, expected) {
     const offlineCore = event('fetch', req('assets/js/spv2-core.js', 'cors'));
     await checkText(offlineCore, 'NEW CORE'); await finish(offlineCore);
 
+    fetchImpl = async () => {
+        const resp = new Response('REDIRECTED SHELL');
+        Object.defineProperty(resp, 'redirected', { value: true });
+        return resp;
+    };
+    const redirected = event('fetch', req('', 'cors'));
+    await checkText(redirected, 'REDIRECTED SHELL'); await finish(redirected);
+    fetchImpl = offline;
+    const afterRedirect = event('fetch', req());
+    await checkText(afterRedirect, 'NEW SHELL'); await finish(afterRedirect);
+
     let serverErrorBodyCanceled = false;
     fetchImpl = async () => {
         const resp = new Response('server unavailable', { status: 503 });
