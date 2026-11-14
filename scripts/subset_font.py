@@ -107,7 +107,7 @@ def collect_chars(html):
         def handle_starttag(self, tag, attrs):
             self.tag = tag.lower()
             for key, val in attrs:
-                if val and key in ("aria-label", "title", "placeholder", "alt", "content"):
+                if val and key in ("title", "placeholder", "alt"):
                     parts.append(val)
 
         def handle_endtag(self, tag):
