@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Nebulove 字体子集化"""
 import base64
+from html.parser import HTMLParser
 import os
 import re
 import sys
@@ -13,6 +14,125 @@ FONT_URL = "https://raw.githubusercontent.com/lingyicute/Nebulove/main/Nebulove.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_PATH = os.path.join(REPO_ROOT, "index.html")
 
+_REGEX_PREV = set("(,=:[!&|?{};\n")
+
+
+def _strip_css_comments(css):
+    out, i, n = [], 0, len(css)
+    while i < n:
+        c = css[i]
+        if c in ('"', "'"):
+            out.append(c)
+            i += 1
+            while i < n:
+                if css[i] == "\\" and i + 1 < n:
+                    out.append(css[i:i + 2])
+                    i += 2
+                elif css[i] == c:
+                    out.append(c)
+                    i += 1
+                    break
+                else:
+                    out.append(css[i])
+                    i += 1
+        elif css[i:i + 2] == "/*":
+            end = css.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _extract_js_strings(code):
+    out, i, n = [], 0, len(code)
+    prev = ""
+    while i < n:
+        c = code[i]
+        if c in ('"', "'", "`"):
+            i += 1
+            while i < n:
+                if code[i] == "\\" and i + 1 < n:
+                    out.append(code[i:i + 2])
+                    i += 2
+                elif code[i] == c:
+                    i += 1
+                    break
+                else:
+                    out.append(code[i])
+                    i += 1
+            prev = c
+        elif code[i:i + 2] == "//":
+            end = code.find("\n", i + 2)
+            i = n if end == -1 else end + 1
+        elif code[i:i + 2] == "/*":
+            end = code.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+        elif c == "/" and (not prev or prev in _REGEX_PREV):
+            i += 1
+            in_class = False
+            while i < n:
+                if code[i] == "\\" and i + 1 < n:
+                    i += 2
+                elif code[i] == "[":
+                    in_class = True
+                    i += 1
+                elif code[i] == "]":
+                    in_class = False
+                    i += 1
+                elif code[i] == "/" and not in_class:
+                    i += 1
+                    break
+                else:
+                    i += 1
+            prev = "/"
+        else:
+            if not c.isspace():
+                prev = c
+            i += 1
+    return "".join(out)
+
+
+def collect_chars(html):
+    # 先去掉上一轮内嵌的 data URI，避免无意义的大串扫描；
+    # 解析 HTML 以自动忽略 HTML 注释、解码字符实体，并过滤 CSS/JS 注释中的未渲染字符。
+    cleaned = re.sub(r"data:font/woff2[^\"'\)]*", "", html)
+    parts = []
+
+    class _Collector(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.tag = None
+
+        def handle_starttag(self, tag, attrs):
+            self.tag = tag.lower()
+            for key, val in attrs:
+                if val and key in ("aria-label", "title", "placeholder", "alt", "content"):
+                    parts.append(val)
+
+        def handle_endtag(self, tag):
+            self.tag = None
+
+        def handle_data(self, data):
+            if self.tag == "style":
+                parts.append(_strip_css_comments(data))
+            elif self.tag == "script":
+                parts.append(_extract_js_strings(data))
+            else:
+                parts.append(data)
+
+    parser = _Collector()
+    parser.feed(cleaned)
+    parser.close()
+
+    chars = set("".join(parts))
+    # 补全 ASCII 可打印字符（32-126）：覆盖英文输入、代码、标点
+    for c in range(32, 127):
+        chars.add(chr(c))
+    # 常用中文标点
+    chars.update(['：', '，', '。', '！', '？', '；', '“', '”', '‘', '’', '（', '）', '【', '】', '—', '…', '·', '《', '》', '×', '＝', '÷', '＋', '－'])
+    return chars
+
 
 def main():
     if not os.path.exists(INDEX_PATH):
@@ -23,15 +143,8 @@ def main():
     with open(INDEX_PATH, "r", encoding="utf-8") as f:
         html = f.read()
 
-    # 1. 收集所需字符（先去掉上一轮内嵌的 data URI，避免无意义的大串扫描；
-    #    base64 字符本就属于 ASCII 子集，不影响结果）
-    html_for_chars = re.sub(r"data:font/woff2[^\"'\)]*", "", html)
-    chars = set(html_for_chars)
-    # 补全 ASCII 可打印字符（32-126）：覆盖英文输入、代码、标点
-    for c in range(32, 127):
-        chars.add(chr(c))
-    # 常用中文标点
-    chars.update(['：', '，', '。', '！', '？', '；', '“', '”', '‘', '’', '（', '）', '【', '】', '—', '…', '·', '《', '》', '×', '＝', '÷', '＋', '－'])
+    # 1. 收集实际会渲染的所需字符
+    chars = collect_chars(html)
 
     print(f"Total unique characters needed: {len(chars)}")
 
