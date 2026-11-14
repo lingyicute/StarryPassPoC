@@ -951,15 +951,17 @@
             }
 
             function hasWeakRoot(value) {
-                if (isWeakRoot(value)) return true;
+                var stem = value, i, p;
                 // Strip BEFORE de-leeting so suffix digits do not turn into letters.
-                // Try every boundary to preserve digit-ending roots (e.g. abc123!).
-                var stem = value;
-                for (var i = 0; i < 8 && /[0-9!@#$%^&*()_+\-=[\]{};:'"\\|,.<>/?~`]/.test(stem.slice(-1)); i++) {
-                    stem = stem.slice(0, -1);
+                // Try every boundary to preserve digit-ending roots (e.g. abc123!), and
+                // fold pure repetitions (e.g. P@ssw0rd2026!P@ssw0rd2026!).
+                for (i = 0; ; i++) {
                     if (isWeakRoot(stem)) return true;
+                    p = shortestPeriod(stem);
+                    if (p > 0 && p * 2 <= stem.length && hasWeakRoot(stem.slice(0, p))) return true;
+                    if (i >= 8 || !/[0-9!@#$%^&*()_+\-=[\]{};:'"\\|,.<>/?~`]/.test(stem.slice(-1))) return false;
+                    stem = stem.slice(0, -1);
                 }
-                return false;
             }
 
             function isKeyboardStep(a, b) {
@@ -1016,7 +1018,9 @@
                 // Count code points: one astral character (e.g. an emoji) has length 2 but is still a one-character code.
                 if (Array.from(cLower).length >= 2 && mLower.indexOf(cLower) !== -1)
                     return { level: 1, label: '弱 · 主密码勿含代号', bits: Math.round(Math.min(16, outBits)) };
-                if (/^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(m))
+                var datePeriod = shortestPeriod(m);
+                var dateUnit = datePeriod > 0 && datePeriod * 2 <= m.length ? m.slice(0, datePeriod) : m;
+                if (/^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(dateUnit))
                     return { level: 1, label: '弱 · 勿用纯日期', bits: Math.round(Math.min(15, outBits)) };
                 if (hasWeakRoot(mLower))
                     return { level: 1, label: '弱 · 含常见弱口令', bits: Math.round(Math.min(18, outBits)) };
