@@ -144,4 +144,10 @@ for (const nested of [('ab'.repeat(40) + 'c').repeat(2), ('ab'.repeat(40) + 'c')
 }
 assert.equal(estimate(('ab'.repeat(40) + 'c').repeat(2)).bits, estimate('ab'.repeat(40) + 'c').bits + 1,
     'doubling a string with an internal repeat adds only one bit');
+// Repeating a weak root or date must not bypass the weak-root / date checks.
+for (const value of ['P@ssw0rd2026!'.repeat(2), 'Administrator2026!'.repeat(2),
+    'Passwordpassword', 'passwordpassword2026!']) {
+    expectWeak(value);
+}
+assert.deepEqual(estimate('20000101'.repeat(2)), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
