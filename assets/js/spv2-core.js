@@ -407,16 +407,17 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             LOOP: 0x03, IF: 0x04, ELSE: 0x05, END: 0x0b, BR_IF: 0x0d,
             LGET: 0x20, LSET: 0x21, LTEE: 0x22, I64_LD: 0x29, I64_ST: 0x37,
             I32_C: 0x41, I64_C: 0x42, I32_LTU: 0x49, I32_ADD: 0x6a, I32_SHL: 0x74,
-            I64_ADD: 0x7c, I64_MUL: 0x7e, I64_AND: 0x83, I64_XOR: 0x85, I64_SHL: 0x86, I64_ROTR: 0x8a
+            I64_ADD: 0x7c, I64_MUL: 0x7e, I64_XOR: 0x85, I64_SHL: 0x86, I64_ROTR: 0x8a,
+            I32_WRAP_I64: 0xa7, I64_EXTEND_I32_U: 0xad
         };
         // 行置换直接读入 X^Y 并写入 R，列置换在局部变量完成 8 次 G 后直接异或 R 写回目标块，
         // 省去独立的初始化/写回循环、每块 512 次 64 位内存读写与 120 次分支。
-        var I = 5, BASE = 6, ZPTR = 7, BX = 8, BY = 9, BR = 10, MASK = 11, V0 = 12;
+        var I = 5, BASE = 6, ZPTR = 7, BX = 8, BY = 9, BR = 10, V0 = 11;
         function step(X, Y, Z, R) {
             return [
                 OP.LGET, X, OP.LGET, Y, OP.I64_ADD,
-                OP.LGET, X, OP.LGET, MASK, OP.I64_AND,
-                OP.LGET, Y, OP.LGET, MASK, OP.I64_AND,
+                OP.LGET, X, OP.I32_WRAP_I64, OP.I64_EXTEND_I32_U,
+                OP.LGET, Y, OP.I32_WRAP_I64, OP.I64_EXTEND_I32_U,
                 OP.I64_MUL, OP.I64_C, 1, OP.I64_SHL,
                 OP.I64_ADD, OP.LTEE, X,
                 OP.LGET, Z, OP.I64_XOR, OP.I64_C, R, OP.I64_ROTR, OP.LSET, Z
@@ -456,8 +457,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             );
         }
         var fn1 = [
-            2, 6, 0x7f, 17, 0x7e,
-            OP.I64_C, 0xff, 0xff, 0xff, 0xff, 0x0f, OP.LSET, MASK,
+            2, 6, 0x7f, 16, 0x7e,
             OP.LGET, 4, OP.I32_C].concat(sleb(1024), [OP.I32_ADD, OP.LSET, ZPTR,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
