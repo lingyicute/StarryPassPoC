@@ -987,8 +987,8 @@
             // then extended. Returned only when collapsing it is clearly cheaper than per-character
             // scoring, where every further character adds at least 0.5 bits.
             var RUN_FAIL = new Int32Array(256);
-            function repeatedRun(cps, start) {
-                var n = cps.length, w = Math.min(n - start, RUN_FAIL.length), k = 0, best = 0, period = 0, p, hit = false;
+            function repeatedRun(cps, start, limit) {
+                var w = Math.min(limit - start, RUN_FAIL.length), k = 0, best = 0, period = 0, p, hit = false;
                 // Cheap necessary condition first: the unit's first and last characters recur one period later.
                 for (p = 1; p * 2 <= w && !hit; p++) hit = cps[start + p] === cps[start] && cps[start + 2 * p - 1] === cps[start + p - 1];
                 if (!hit) return null;
@@ -1000,7 +1000,7 @@
                     if (p * 2 <= j + 1) { best = j + 1; period = p; }
                 }
                 if (!best) return null;
-                while (start + best < n && cps[start + best] === cps[start + best - period]) best++;
+                while (start + best < limit && cps[start + best] === cps[start + best - period]) best++;
                 return Math.log2(best / period) < 0.5 * (best - period) ? { period: period, length: best } : null;
             }
 
@@ -1036,17 +1036,20 @@
                 // 否则超长重复串会被逐字符累加成“强”。
                 var unitLen = shortestPeriod(cps);
                 if (unitLen * 2 > cps.length) unitLen = cps.length;
-                // A repeat inside a longer string (abab...abX) is collapsed the same way; otherwise one
-                // extra character would turn a weak periodic master into the top rating.
-                var n = cps.length, whole = unitLen < n, run, unitEnd = 0, runEnd = 0, repeatBits = 0;
+                // A repeat inside a longer string (abab...abX) is collapsed the same way; nested
+                // repeats inside a collapsed period unit are folded too via a boundary stack.
+                var n = cps.length, skips = [], repeatBits = 0, limit, run;
+                if (unitLen < n) {
+                    skips.push({ unitEnd: unitLen, runEnd: n });
+                    repeatBits += Math.log2(n / unitLen);
+                }
                 var bits = 0, seen = Object.create(null), prevCh, prevCp, count, baseBits;
                 for (i = 0; i < n; i++) {
-                    if (i >= runEnd) {
-                        run = whole ? { period: unitLen, length: n } : repeatedRun(cps, i);
-                        if (run) {
-                            unitEnd = i + run.period; runEnd = i + run.length;
-                            repeatBits += Math.log2(run.length / run.period);
-                        }
+                    limit = skips.length ? skips[skips.length - 1].unitEnd : n;
+                    while ((run = repeatedRun(cps, i, limit))) {
+                        limit = i + run.period;
+                        skips.push({ unitEnd: limit, runEnd: i + run.length });
+                        repeatBits += Math.log2(run.length / run.period);
                     }
                     ch = cps[i]; cp = ch.codePointAt(0);
                     if (cp >= 32 && cp <= 126) baseBits = asciiBits;
@@ -1061,7 +1064,9 @@
                     else if (count === 1) bits += baseBits * 0.65;
                     else bits += baseBits * 0.35;
                     seen[ch] = count + 1;
-                    if (i + 1 === unitEnd && runEnd > unitEnd) i = runEnd - 1;  // skip the repeats of the unit
+                    while (skips.length && i + 1 === skips[skips.length - 1].unitEnd) {
+                        i = skips.pop().runEnd - 1;  // skip the repeats of the unit
+                    }
                 }
                 bits += repeatBits;
                 if (tier === 'paranoid') bits += 3;

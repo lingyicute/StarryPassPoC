@@ -136,4 +136,12 @@ assert.equal(estimate('xhello world hello world y').bits, estimate('xhello world
     'two cycles inside a longer string add log2(2) bits');
 assert.equal(estimate('q'.repeat(6) + 'W8#k mountain').bits, estimate('q'.repeat(5) + 'W8#k mountain').bits + 1,
     'short repeats keep the per-character scoring');
+// Repeating a weak string that already contains repeats must still collapse the inner repeat.
+for (const nested of [('ab'.repeat(40) + 'c').repeat(2), ('ab'.repeat(40) + 'c').repeat(2) + 'd',
+    'x' + ('ab'.repeat(40) + 'c').repeat(2) + 'y', ('abc' + 'a'.repeat(100)).repeat(2) + 'Z',
+    'a'.repeat(180) + 'X' + 'a'.repeat(180) + 'X']) {
+    assert.equal(estimate(nested).level, 1, `nested repeat overrated: ${nested.slice(0, 12)}`);
+}
+assert.equal(estimate(('ab'.repeat(40) + 'c').repeat(2)).bits, estimate('ab'.repeat(40) + 'c').bits + 1,
+    'doubling a string with an internal repeat adds only one bit');
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
