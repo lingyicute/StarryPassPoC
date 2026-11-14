@@ -149,5 +149,7 @@ for (const value of ['P@ssw0rd2026!'.repeat(2), 'Administrator2026!'.repeat(2),
     'Passwordpassword', 'passwordpassword2026!']) {
     expectWeak(value);
 }
-assert.deepEqual(estimate('20000101'.repeat(2)), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
+for (const dateVal of ['20000101'.repeat(2), '20120120', '20220220', '20120120'.repeat(2)]) {
+    assert.deepEqual(estimate(dateVal), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
+}
 console.log(`PASS inline script syntax, ${roots.length} reference roots, ${checks} weak-root cases, guard/PIN/NFC regressions`);
