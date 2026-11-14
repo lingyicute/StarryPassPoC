@@ -296,10 +296,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function mulHi32(a, b) {
-        var a0 = a & 0xffff, a1 = a >>> 16, b0 = b & 0xffff, b1 = b >>> 16;
-        var p0 = Math.imul(a0, b0) >>> 0, p1 = Math.imul(a0, b1) >>> 0, p2 = Math.imul(a1, b0) >>> 0, p3 = Math.imul(a1, b1) >>> 0;
-        var mid = (p0 >>> 16) + (p1 & 0xffff) + (p2 & 0xffff);
-        return (p3 + (p1 >>> 16) + (p2 >>> 16) + (mid >>> 16)) >>> 0;
+        // 精确低 32 位由 Math.imul 给出，双精度乘积误差远小于 2^31，减低位除以 2^32 后四舍五入即得精确高 32 位。
+        return (((a * b - (Math.imul(a, b) >>> 0)) / 4294967296 + 0.5) >>> 0);
     }
 
     function indexAlpha(pass, lane, slice, lanes, sliceLen, laneLen, indexInSlice, j1, j2) {
@@ -312,7 +310,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         var y = mulHi32(refAreaSize >>> 0, x);
         var relPos = refAreaSize - 1 - y;
         var startPos = (pass !== 0 && slice !== 3) ? (slice + 1) * sliceLen : 0;
-        return refLane * laneLen + ((startPos + relPos) % laneLen);
+        var pos = startPos + relPos;
+        return refLane * laneLen + (pos >= laneLen ? pos - laneLen : pos);
     }
 
     /* Pure-JS G-block compressor fallback (for environments without WebAssembly, e.g. Lockdown Mode) */
