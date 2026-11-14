@@ -14,7 +14,11 @@ FONT_URL = "https://raw.githubusercontent.com/lingyicute/Nebulove/main/Nebulove.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_PATH = os.path.join(REPO_ROOT, "index.html")
 
-_REGEX_PREV = set("(,=:[!&|?{};\n")
+_REGEX_PREV = set("(,=:[!&|?{};+-*%^~<>")
+_REGEX_KEYWORDS = frozenset({
+    "return", "case", "throw", "in", "of", "typeof", "void", "delete",
+    "yield", "await", "new", "else", "do",
+})
 
 
 def _strip_css_comments(css):
@@ -46,10 +50,27 @@ def _strip_css_comments(css):
 
 def _extract_js_strings(code):
     out, i, n = [], 0, len(code)
-    prev = ""
+    prev, prev_word = "", ""
+    tpl_braces = []
+
+    def scan_template(pos):
+        while pos < n:
+            if code[pos] == "\\" and pos + 1 < n:
+                out.append(code[pos:pos + 2])
+                pos += 2
+            elif code[pos:pos + 2] == "${":
+                tpl_braces.append(0)
+                return pos + 2, "{", ""
+            elif code[pos] == "`":
+                return pos + 1, "`", ""
+            else:
+                out.append(code[pos])
+                pos += 1
+        return pos, "`", ""
+
     while i < n:
         c = code[i]
-        if c in ('"', "'", "`"):
+        if c in ('"', "'"):
             i += 1
             while i < n:
                 if code[i] == "\\" and i + 1 < n:
@@ -61,14 +82,28 @@ def _extract_js_strings(code):
                 else:
                     out.append(code[i])
                     i += 1
-            prev = c
+            prev, prev_word = c, ""
+        elif c == "`":
+            i, prev, prev_word = scan_template(i + 1)
+        elif c == "{" and tpl_braces:
+            tpl_braces[-1] += 1
+            prev, prev_word = "{", ""
+            i += 1
+        elif c == "}" and tpl_braces:
+            if tpl_braces[-1] == 0:
+                tpl_braces.pop()
+                i, prev, prev_word = scan_template(i + 1)
+            else:
+                tpl_braces[-1] -= 1
+                prev, prev_word = "}", ""
+                i += 1
         elif code[i:i + 2] == "//":
             end = code.find("\n", i + 2)
             i = n if end == -1 else end + 1
         elif code[i:i + 2] == "/*":
             end = code.find("*/", i + 2)
             i = n if end == -1 else end + 2
-        elif c == "/" and (not prev or prev in _REGEX_PREV):
+        elif c == "/" and (not prev or prev in _REGEX_PREV or prev_word in _REGEX_KEYWORDS):
             i += 1
             in_class = False
             while i < n:
@@ -85,10 +120,17 @@ def _extract_js_strings(code):
                     break
                 else:
                     i += 1
-            prev = "/"
+            prev, prev_word = "/", ""
+        elif c.isalpha() or c in ("_", "$"):
+            j = i + 1
+            while j < n and (code[j].isalnum() or code[j] in ("_", "$")):
+                j += 1
+            prev_word = code[i:j]
+            prev = prev_word[-1]
+            i = j
         else:
             if not c.isspace():
-                prev = c
+                prev, prev_word = c, ""
             i += 1
     return "".join(out)
 
