@@ -84,7 +84,8 @@ function cancelBody(response) {
 }
 
 function putInRuntimeCache(request, response, navigation) {
-    if (response.status !== 200 || response.type === "opaque") return Promise.resolve();
+    // 重定向响应写入运行时缓存会导致离线 navigate 请求（redirect: manual）被浏览器拒收。
+    if (response.status !== 200 || response.type === "opaque" || response.redirected) return Promise.resolve();
     const key = isShellRequest(request) && (navigation || STATIC_URLS.has(request.url)) ? SHELL_URL : request.url;
     // 仅缓存明确列出的应用资源；不无限积累带查询参数的 URL 或意外缓存未来 API 的响应。
     if (!STATIC_URLS.has(key)) return Promise.resolve();
