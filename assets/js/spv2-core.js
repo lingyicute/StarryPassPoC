@@ -319,15 +319,15 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     var JS_R = new Int32Array(256), JS_Z = new Int32Array(256);
     function jsGRound(Z, a, b, c, d) {
         var alo = Z[a], ahi = Z[a + 1], blo = Z[b], bhi = Z[b + 1], clo = Z[c], chi = Z[c + 1], dlo = Z[d], dhi = Z[d + 1];
-        var a0, a1, b0, b1, p0, p1, p2, p3, mid, mlo, mhi, s1, s2, xlo, xhi;
+        var a0, a1, b0, b1, p0, p1, p2, p3, mid, mlo, mhi, s, xlo, xhi;
 
         a0 = alo & 0xffff; a1 = alo >>> 16; b0 = blo & 0xffff; b1 = blo >>> 16;
         p0 = Math.imul(a0, b0); p1 = Math.imul(a0, b1); p2 = Math.imul(a1, b0); p3 = Math.imul(a1, b1);
         mid = (p0 >>> 16) + (p1 & 0xffff) + (p2 & 0xffff);
         mlo = (mid << 16) | (p0 & 0xffff); mhi = p3 + (p1 >>> 16) + (p2 >>> 16) + (mid >>> 16);
         mhi = (mhi << 1) | (mlo >>> 31); mlo = mlo << 1;
-        s1 = (alo >>> 0) + (blo >>> 0); s2 = (s1 >>> 0) + (mlo >>> 0);
-        alo = s2 | 0; ahi = (ahi + bhi + mhi + (s1 > 0xffffffff ? 1 : 0) + (s2 > 0xffffffff ? 1 : 0)) | 0;
+        s = (alo >>> 0) + (blo >>> 0) + (mlo >>> 0);
+        alo = s | 0; ahi = (ahi + bhi + mhi + ((s / 4294967296) | 0)) | 0;
         xlo = dlo ^ alo; xhi = dhi ^ ahi; dlo = xhi; dhi = xlo;
 
         a0 = clo & 0xffff; a1 = clo >>> 16; b0 = dlo & 0xffff; b1 = dlo >>> 16;
@@ -335,8 +335,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         mid = (p0 >>> 16) + (p1 & 0xffff) + (p2 & 0xffff);
         mlo = (mid << 16) | (p0 & 0xffff); mhi = p3 + (p1 >>> 16) + (p2 >>> 16) + (mid >>> 16);
         mhi = (mhi << 1) | (mlo >>> 31); mlo = mlo << 1;
-        s1 = (clo >>> 0) + (dlo >>> 0); s2 = (s1 >>> 0) + (mlo >>> 0);
-        clo = s2 | 0; chi = (chi + dhi + mhi + (s1 > 0xffffffff ? 1 : 0) + (s2 > 0xffffffff ? 1 : 0)) | 0;
+        s = (clo >>> 0) + (dlo >>> 0) + (mlo >>> 0);
+        clo = s | 0; chi = (chi + dhi + mhi + ((s / 4294967296) | 0)) | 0;
         xlo = blo ^ clo; xhi = bhi ^ chi; blo = (xlo >>> 24) | (xhi << 8); bhi = (xhi >>> 24) | (xlo << 8);
 
         a0 = alo & 0xffff; a1 = alo >>> 16; b0 = blo & 0xffff; b1 = blo >>> 16;
@@ -344,8 +344,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         mid = (p0 >>> 16) + (p1 & 0xffff) + (p2 & 0xffff);
         mlo = (mid << 16) | (p0 & 0xffff); mhi = p3 + (p1 >>> 16) + (p2 >>> 16) + (mid >>> 16);
         mhi = (mhi << 1) | (mlo >>> 31); mlo = mlo << 1;
-        s1 = (alo >>> 0) + (blo >>> 0); s2 = (s1 >>> 0) + (mlo >>> 0);
-        alo = s2 | 0; ahi = (ahi + bhi + mhi + (s1 > 0xffffffff ? 1 : 0) + (s2 > 0xffffffff ? 1 : 0)) | 0;
+        s = (alo >>> 0) + (blo >>> 0) + (mlo >>> 0);
+        alo = s | 0; ahi = (ahi + bhi + mhi + ((s / 4294967296) | 0)) | 0;
         xlo = dlo ^ alo; xhi = dhi ^ ahi; dlo = (xlo >>> 16) | (xhi << 16); dhi = (xhi >>> 16) | (xlo << 16);
 
         a0 = clo & 0xffff; a1 = clo >>> 16; b0 = dlo & 0xffff; b1 = dlo >>> 16;
@@ -353,8 +353,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         mid = (p0 >>> 16) + (p1 & 0xffff) + (p2 & 0xffff);
         mlo = (mid << 16) | (p0 & 0xffff); mhi = p3 + (p1 >>> 16) + (p2 >>> 16) + (mid >>> 16);
         mhi = (mhi << 1) | (mlo >>> 31); mlo = mlo << 1;
-        s1 = (clo >>> 0) + (dlo >>> 0); s2 = (s1 >>> 0) + (mlo >>> 0);
-        clo = s2 | 0; chi = (chi + dhi + mhi + (s1 > 0xffffffff ? 1 : 0) + (s2 > 0xffffffff ? 1 : 0)) | 0;
+        s = (clo >>> 0) + (dlo >>> 0) + (mlo >>> 0);
+        clo = s | 0; chi = (chi + dhi + mhi + ((s / 4294967296) | 0)) | 0;
         xlo = blo ^ clo; xhi = bhi ^ chi; blo = (xlo << 1) | (xhi >>> 31); bhi = (xhi << 1) | (xlo >>> 31);
 
         Z[a] = alo; Z[a + 1] = ahi; Z[b] = blo; Z[b + 1] = bhi; Z[c] = clo; Z[c + 1] = chi; Z[d] = dlo; Z[d + 1] = dhi;
