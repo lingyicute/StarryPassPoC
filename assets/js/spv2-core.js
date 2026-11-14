@@ -404,14 +404,14 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
         function sec(id, body) { return [id].concat(uleb(body.length), body); }
         var OP = {
-            LOOP: 0x03, IF: 0x04, END: 0x0b, BR_IF: 0x0d,
+            LOOP: 0x03, IF: 0x04, ELSE: 0x05, END: 0x0b, BR_IF: 0x0d,
             LGET: 0x20, LSET: 0x21, LTEE: 0x22, I64_LD: 0x29, I64_ST: 0x37,
             I32_C: 0x41, I64_C: 0x42, I32_LTU: 0x49, I32_ADD: 0x6a, I32_SHL: 0x74,
             I64_ADD: 0x7c, I64_MUL: 0x7e, I64_AND: 0x83, I64_XOR: 0x85, I64_SHL: 0x86, I64_ROTR: 0x8a
         };
-        // 每轮 P 置换先把 16 个字装入局部变量，8 次 G 全部在局部变量上完成后再写回，
-        // 省去逐次 G 的函数调用与重复的内存读写。
-        var I = 5, BASE = 6, ZPTR = 7, T64 = 8, MASK = 9, V0 = 10;
+        // 行置换直接读入 X^Y 并写入 R，列置换在局部变量完成 8 次 G 后直接异或 R 写回目标块，
+        // 省去独立的初始化/写回循环、每块 512 次 64 位内存读写与 120 次分支。
+        var I = 5, BASE = 6, ZPTR = 7, BX = 8, BY = 9, BR = 10, MASK = 11, V0 = 12;
         function step(X, Y, Z, R) {
             return [
                 OP.LGET, X, OP.LGET, Y, OP.I64_ADD,
@@ -426,54 +426,58 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             a += V0; b += V0; c += V0; d += V0;
             return [].concat(step(a, b, d, 32), step(c, d, b, 24), step(a, b, d, 16), step(c, d, b, 63));
         }
-        function permuteP(words) {
-            var code = [], k;
-            for (k = 0; k < 16; k++) code = code.concat([OP.LGET, BASE, OP.I64_LD, 3], uleb(words[k] * 8), [OP.LSET, V0 + k]);
-            code = code.concat(gRound(0,4,8,12), gRound(1,5,9,13), gRound(2,6,10,14), gRound(3,7,11,15),
-                               gRound(0,5,10,15), gRound(1,6,11,12), gRound(2,7,8,13), gRound(3,4,9,14));
-            for (k = 0; k < 16; k++) code = code.concat([OP.LGET, BASE, OP.LGET, V0 + k, OP.I64_ST, 3], uleb(words[k] * 8));
-            return code;
+        var gBlock = [].concat(
+            gRound(0,4,8,12), gRound(1,5,9,13), gRound(2,6,10,14), gRound(3,7,11,15),
+            gRound(0,5,10,15), gRound(1,6,11,12), gRound(2,7,8,13), gRound(3,4,9,14)
+        );
+        var colWords = [0,1,16,17,32,33,48,49,64,65,80,81,96,97,112,113];
+        var rowLoad = [], rowStore = [], colLoad = [], colWriteXor = [], colWriteSet = [], k, off;
+        for (k = 0; k < 16; k++) {
+            off = uleb(k * 8);
+            rowLoad = rowLoad.concat(
+                [OP.LGET, BR],
+                [OP.LGET, BX, OP.I64_LD, 3], off,
+                [OP.LGET, BY, OP.I64_LD, 3], off,
+                [OP.I64_XOR, OP.LTEE, V0 + k, OP.I64_ST, 3], off
+            );
+            rowStore = rowStore.concat([OP.LGET, BASE, OP.LGET, V0 + k, OP.I64_ST, 3], off);
+            off = uleb(colWords[k] * 8);
+            colLoad = colLoad.concat([OP.LGET, BASE, OP.I64_LD, 3], off, [OP.LSET, V0 + k]);
+            colWriteXor = colWriteXor.concat(
+                [OP.LGET, BX],
+                [OP.LGET, BX, OP.I64_LD, 3], off,
+                [OP.LGET, BR, OP.I64_LD, 3], off,
+                [OP.I64_XOR, OP.LGET, V0 + k, OP.I64_XOR, OP.I64_ST, 3], off
+            );
+            colWriteSet = colWriteSet.concat(
+                [OP.LGET, BX],
+                [OP.LGET, BR, OP.I64_LD, 3], off,
+                [OP.LGET, V0 + k, OP.I64_XOR, OP.I64_ST, 3], off
+            );
         }
-        var rowPerm = permuteP([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
-        var colPerm = permuteP([0,1,16,17,32,33,48,49,64,65,80,81,96,97,112,113]);
         var fn1 = [
-            2, 3, 0x7f, 18, 0x7e,
+            2, 6, 0x7f, 17, 0x7e,
             OP.I64_C, 0xff, 0xff, 0xff, 0xff, 0x0f, OP.LSET, MASK,
             OP.LGET, 4, OP.I32_C].concat(sleb(1024), [OP.I32_ADD, OP.LSET, ZPTR,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
-                OP.LGET, 4, OP.LGET, I, OP.I32_ADD,
-                OP.LGET, 0, OP.LGET, I, OP.I32_ADD, OP.I64_LD, 3, 0,
-                OP.LGET, 1, OP.LGET, I, OP.I32_ADD, OP.I64_LD, 3, 0,
-                OP.I64_XOR, OP.LTEE, T64, OP.I64_ST, 3, 0,
-                OP.LGET, ZPTR, OP.LGET, I, OP.I32_ADD, OP.LGET, T64, OP.I64_ST, 3, 0,
-                OP.LGET, I, OP.I32_C, 8, OP.I32_ADD, OP.LTEE, I,
-                OP.I32_C], sleb(1024), [OP.I32_LTU, OP.BR_IF, 0,
-            OP.END,
-            OP.I32_C, 0, OP.LSET, I,
-            OP.LOOP, 0x40,
-                OP.LGET, ZPTR, OP.LGET, I, OP.I32_C, 7, OP.I32_SHL, OP.I32_ADD, OP.LSET, BASE],
-                rowPerm, [
+                OP.LGET, I, OP.I32_C, 7, OP.I32_SHL, OP.LTEE, BASE,
+                OP.LGET, 0, OP.I32_ADD, OP.LSET, BX,
+                OP.LGET, BASE, OP.LGET, 1, OP.I32_ADD, OP.LSET, BY,
+                OP.LGET, BASE, OP.LGET, 4, OP.I32_ADD, OP.LSET, BR,
+                OP.LGET, BASE, OP.LGET, ZPTR, OP.I32_ADD, OP.LSET, BASE],
+                rowLoad, gBlock, rowStore, [
                 OP.LGET, I, OP.I32_C, 1, OP.I32_ADD, OP.LTEE, I, OP.I32_C, 8, OP.I32_LTU, OP.BR_IF, 0,
             OP.END,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
-                OP.LGET, ZPTR, OP.LGET, I, OP.I32_C, 4, OP.I32_SHL, OP.I32_ADD, OP.LSET, BASE],
-                colPerm, [
+                OP.LGET, I, OP.I32_C, 4, OP.I32_SHL, OP.LTEE, BASE,
+                OP.LGET, 2, OP.I32_ADD, OP.LSET, BX,
+                OP.LGET, BASE, OP.LGET, 4, OP.I32_ADD, OP.LSET, BR,
+                OP.LGET, BASE, OP.LGET, ZPTR, OP.I32_ADD, OP.LSET, BASE],
+                colLoad, gBlock, [
+                OP.LGET, 3, OP.IF, 0x40], colWriteXor, [OP.ELSE], colWriteSet, [OP.END,
                 OP.LGET, I, OP.I32_C, 1, OP.I32_ADD, OP.LTEE, I, OP.I32_C, 8, OP.I32_LTU, OP.BR_IF, 0,
-            OP.END,
-            OP.I32_C, 0, OP.LSET, I,
-            OP.LOOP, 0x40,
-                OP.LGET, 4, OP.LGET, I, OP.I32_ADD, OP.I64_LD, 3, 0,
-                OP.LGET, ZPTR, OP.LGET, I, OP.I32_ADD, OP.I64_LD, 3, 0,
-                OP.I64_XOR, OP.LSET, T64,
-                OP.LGET, 3, OP.IF, 0x40,
-                    OP.LGET, 2, OP.LGET, I, OP.I32_ADD, OP.I64_LD, 3, 0,
-                    OP.LGET, T64, OP.I64_XOR, OP.LSET, T64,
-                OP.END,
-                OP.LGET, 2, OP.LGET, I, OP.I32_ADD, OP.LGET, T64, OP.I64_ST, 3, 0,
-                OP.LGET, I, OP.I32_C, 8, OP.I32_ADD, OP.LTEE, I,
-                OP.I32_C], sleb(1024), [OP.I32_LTU, OP.BR_IF, 0,
             OP.END, OP.END
         ]);
         var wasmBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00].concat(
