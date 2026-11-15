@@ -21,6 +21,25 @@ _REGEX_KEYWORDS = frozenset({
 })
 
 
+_CSS_HEX_ESCAPE = re.compile(r"\\([0-9a-fA-F]{1,6})(?:\r\n|[ \t\r\n\f])?")
+
+
+def _read_css_escape(css, pos):
+    # CSS 字符串转义（如 content:"\25BE"）渲染的是解码后的字符，而非反斜杠与十六进制数字。
+    match = _CSS_HEX_ESCAPE.match(css, pos)
+    if match:
+        value = int(match.group(1), 16)
+        if value == 0 or value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:
+            # 浏览器以 U+FFFD 替代这些值，原值没有可用的 cmap 条目。
+            return "", match.end()
+        return chr(value), match.end()
+    if css.startswith("\r\n", pos + 1):
+        return "", pos + 3
+    if css[pos + 1] in "\n\r\f":
+        return "", pos + 2  # 字符串内的续行不产生字符
+    return css[pos + 1], pos + 2
+
+
 def _strip_css_comments(css):
     out, i, n = [], 0, len(css)
     while i < n:
@@ -30,8 +49,8 @@ def _strip_css_comments(css):
             i += 1
             while i < n:
                 if css[i] == "\\" and i + 1 < n:
-                    out.append(css[i:i + 2])
-                    i += 2
+                    decoded, i = _read_css_escape(css, i)
+                    out.append(decoded)
                 elif css[i] == c:
                     out.append(c)
                     i += 1

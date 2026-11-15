@@ -57,6 +57,18 @@ class CharacterCollectionTests(unittest.TestCase):
         self.assertTrue(set("星愿令") <= chars)
         self.assertTrue(set(map(chr, range(32, 127))) <= chars)
 
+    def test_css_string_escapes(self):
+        chars = subset_font.collect_chars(
+            r'<style>a::after{content:"\25BE  \5FAE\8F6F"} /* "\4E2D" */'
+            r"b::before{content:'\2606x\D800\'\5c'}</style>")
+        self.assertTrue(set("▾微软☆") <= chars)
+        self.assertNotIn("中", chars)
+        self.assertFalse(any(0xD800 <= ord(char) <= 0xDFFF for char in chars))
+
+    def test_css_line_continuation_does_not_break_decoding(self):
+        chars = subset_font.collect_chars('<style>p::after{content:"\\\r\n\\9F8D\r\nx"}</style>')
+        self.assertIn("龍", chars)
+
 
 if __name__ == "__main__":
     unittest.main()
