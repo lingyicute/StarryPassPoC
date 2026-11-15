@@ -1331,6 +1331,11 @@
                 for (var i = 0; i < pwd.length; i++) {
                     if (pool.indexOf(pwd.charAt(i)) === -1) return false;
                 }
+                // A transport success must satisfy the core's category policy too.
+                if (payload.mode !== 'pin') {
+                    if (!/[a-z]/.test(pwd) || !/[A-Z]/.test(pwd) || !/[0-9]/.test(pwd)) return false;
+                    if (payload.mode === 'full' && !/[!@#$%^&*()_=+?\-]/.test(pwd)) return false;
+                }
                 return true;
             }
 

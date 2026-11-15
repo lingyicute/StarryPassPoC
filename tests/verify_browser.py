@@ -575,6 +575,50 @@ async def test_theme_first_paint_and_system_follow(browser, url):
     print('PASS browser: theme applied before first paint and OS changes followed until a manual choice')
 
 
+async def test_required_character_classes(browser, url):
+    cases = [
+        ('full', ['A1!' * 5 + 'A', 'a1!' * 5 + 'a', 'aA!' * 5 + 'a', 'aA1' * 5 + 'a'], FAKE_PASSWORD),
+        ('alnum', ['aA' * 8, 'a1' * 8, 'A1' * 8, '!' * 16], 'aA1' * 5 + 'a'),
+        ('pin', ['abc123', '12345', '1234567'], '845961'),
+    ]
+    for transport in ('worker', 'local'):
+        if transport == 'worker':
+            context, page = await mock_page(browser, url)
+        else:
+            context = await browser.new_context(ignore_https_errors=True, service_workers='block')
+            await context.route('**/assets/js/spv2-core.js', lambda route: route.fulfill(
+                content_type='text/javascript', body="""
+                window.spv2CoreFactory=()=>({
+                    derive(){return Promise.resolve({password:window.__candidate});},
+                    deriveSync(){return {password:window.__candidate};},
+                    wipeSession(){return Promise.resolve();}
+                });"""))
+            page = await context.new_page(); await page.clock.install()
+            await page.add_init_script("window.Worker=class{constructor(){throw new Error('blocked')}}")
+            await page.goto(url)
+            await page.evaluate("document.getElementById('policy').open = true")
+        try:
+            for mode, invalid, valid in cases:
+                await page.click(f'#mode-chips [data-mode={mode}]')
+                for index, candidate in enumerate([*invalid, valid]):
+                    await page.evaluate('value => window.__candidate = value', candidate)
+                    await fill(page, code=f'policy-{transport}-{mode}-{index}')
+                    await page.clock.run_for(300)
+                    if transport == 'worker':
+                        await reply(page, (await requests(page))[-1], candidate)
+                    expected = index == len(invalid)
+                    check(await page.is_enabled('#copy-btn') == expected,
+                          f'{transport}/{mode}: enforces length, pool and required classes ({index})')
+                    check(await page.is_hidden('#derive-bar'), 'policy validation always releases the busy slot')
+                    if expected:
+                        check(await page.inner_text('#password-output') == valid, 'valid policy result recovers after faults')
+                    else:
+                        check(await page.inner_text('#strength-label') == '—', 'rejected policy result is never rated')
+        finally:
+            await context.close()
+    print('PASS browser: required character classes on Worker and local transports')
+
+
 async def test_real_crypto(browser, url):
     context = await browser.new_context(ignore_https_errors=True)
     page = await context.new_page()
@@ -801,6 +845,7 @@ async def main():
                     await test_counter_not_restored(browser, url, state)
                     await test_theme_first_paint_and_system_follow(browser, url)
                     await test_malformed_results(browser, url)
+                    await test_required_character_classes(browser, url)
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
                     await test_service_worker_read_failure(browser, url)
