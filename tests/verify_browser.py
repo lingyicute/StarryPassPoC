@@ -691,6 +691,43 @@ async def test_service_worker(browser, url, site, state):
     print('PASS browser: HTTPS service-worker update, query aliases, offline derivation and HTTP 503')
 
 
+async def test_service_worker_vary(browser, url, state):
+    state['vary_accept'] = True
+    context = await browser.new_context(ignore_https_errors=True)
+    page = await context.new_page()
+    try:
+        await page.goto(url); await poll(lambda: page.evaluate('!!navigator.serviceWorker.controller'))
+        await page.reload(); await page.wait_for_load_state('networkidle')
+        worker = context.service_workers[-1]
+        async def runtime_ready():
+            return await worker.evaluate("""async () => {
+                const cache=await caches.open(RUNTIME), keys=await cache.keys();
+                return keys.some(key=>key.url.endsWith('/assets/js/spv2-core.js'));
+            }""")
+        await poll(runtime_ready)
+        check(await worker.evaluate("""async () => {
+            const cache=await caches.open(RUNTIME), keys=await cache.keys();
+            const core=keys.find(key=>key.url.endsWith('/assets/js/spv2-core.js'));
+            const shell=keys.find(key=>key.url===SHELL_URL);
+            return !!core.headers.get('Accept') && !!shell.headers.get('Accept');
+        }"""), 'runtime cache preserves Vary request headers for both core and canonical shell')
+        check(await worker.evaluate("""async () => {
+            const cache=await caches.open(RUNTIME);
+            return !(await cache.match(new Request(new URL('./assets/js/spv2-core.js', APP_ROOT),
+                {headers:{Accept:'application/x-unmatched'}})));
+        }"""), 'Vary matching is preserved, not bypassed with ignoreVary')
+        await context.set_offline(True)
+        for suffix in ['?vary=1', 'index.html?vary=2']:
+            await page.goto(url.rsplit('/', 1)[0] + '/' + suffix)
+            check(await page.evaluate('typeof spv2CoreFactory') == 'function', 'Vary assets survive offline shell aliases')
+        await fill(page); await ready(page)
+        check(await page.inner_text('#password-output') == BASE_PASSWORD, 'Vary deployment retains offline Worker derivation')
+    finally:
+        state['vary_accept'] = False
+        await context.close()
+    print('PASS browser: real Vary cache keys, offline aliases and Worker derivation')
+
+
 async def test_service_worker_read_failure(browser, url):
     # 只替换真实 SW 的运行时缓存操作；已安装的预缓存与网络保持原样，
     # 浏览器自身的 CacheStorage 仍提供预缓存。
@@ -815,6 +852,8 @@ async def main():
 
             def end_headers(self):
                 self.send_header('Cache-Control', 'no-cache' if state.get('allow_bfcache') else 'no-store')
+                if state.get('vary_accept'):
+                    self.send_header('Vary', 'Accept')
                 super().end_headers()
 
             def do_GET(self):
@@ -849,6 +888,7 @@ async def main():
                     await test_real_crypto(browser, url)
                     await test_service_worker(browser, url, site, state)
                     await test_service_worker_read_failure(browser, url)
+                    await test_service_worker_vary(browser, url, state)
                     await test_tap_feedback_and_keyboard_focus(browser, url)
                     await run_network_timeout_checks(browser, check)
                 finally:

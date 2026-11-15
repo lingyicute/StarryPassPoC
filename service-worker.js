@@ -61,20 +61,28 @@ async function matchCached(name, request) {
     }
 }
 
+// Cache matching compares Vary against the stored request headers. Keep them
+// when canonicalising shell URLs; a bare URL silently discards content negotiation.
+function cacheKeyRequest(request, url) {
+    return request.url === url ? request : new Request(url, { headers: request.headers });
+}
+
 async function cachedResponse(request, navigation) {
+    const shellRequest = cacheKeyRequest(request, SHELL_URL);
+    const rootRequest = cacheKeyRequest(request, APP_ROOT.href);
     // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
     if (isShellRequest(request) && (navigation || STATIC_URLS.has(request.url))) {
         const distinctReq = request.url !== SHELL_URL && request.url !== APP_ROOT.href;
-        return (await matchCached(RUNTIME, SHELL_URL)) || (distinctReq && await matchCached(RUNTIME, request))
-            || (await matchCached(RUNTIME, APP_ROOT.href)) || (distinctReq && await matchCached(VERSION, request))
-            || (await matchCached(VERSION, SHELL_URL)) || (await matchCached(VERSION, APP_ROOT.href));
+        return (await matchCached(RUNTIME, shellRequest)) || (distinctReq && await matchCached(RUNTIME, request))
+            || (await matchCached(RUNTIME, rootRequest)) || (distinctReq && await matchCached(VERSION, request))
+            || (await matchCached(VERSION, shellRequest)) || (await matchCached(VERSION, rootRequest));
     }
     return (await matchCached(RUNTIME, request))
-        || (navigation && await matchCached(RUNTIME, SHELL_URL))
-        || (navigation && await matchCached(RUNTIME, APP_ROOT.href))
+        || (navigation && await matchCached(RUNTIME, shellRequest))
+        || (navigation && await matchCached(RUNTIME, rootRequest))
         || (await matchCached(VERSION, request))
-        || (navigation && await matchCached(VERSION, SHELL_URL))
-        || (navigation && await matchCached(VERSION, APP_ROOT.href));
+        || (navigation && await matchCached(VERSION, shellRequest))
+        || (navigation && await matchCached(VERSION, rootRequest));
 }
 
 function cancelBody(response) {
@@ -90,7 +98,7 @@ function putInRuntimeCache(request, response, navigation) {
     // 仅缓存明确列出的应用资源；不无限积累带查询参数的 URL 或意外缓存未来 API 的响应。
     if (!STATIC_URLS.has(key)) return Promise.resolve();
     const copy = response.clone();
-    return caches.open(RUNTIME).then((cache) => cache.put(key, copy)).catch((err) => {
+    return caches.open(RUNTIME).then((cache) => cache.put(cacheKeyRequest(request, key), copy)).catch((err) => {
         cancelBody(copy);
         throw err;
     });
