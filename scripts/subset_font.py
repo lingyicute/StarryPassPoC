@@ -129,8 +129,10 @@ def _extract_js_strings(code):
             i += 1
             in_class = False
             while i < n:
-                if code[i] == "\\" and i + 1 < n:
+                if code[i] == "\\" and i + 1 < n and code[i + 1] not in "\n\r\u2028\u2029":
                     i += 2
+                elif code[i] in "\n\r\u2028\u2029":
+                    break
                 elif code[i] == "[":
                     in_class = True
                     i += 1
@@ -150,6 +152,9 @@ def _extract_js_strings(code):
             prev_word = code[i:j]
             prev = prev_word[-1]
             i = j
+        elif code[i:i + 2] in ("++", "--"):
+            prev, prev_word = code[i:i + 2], ""
+            i += 2
         else:
             if not c.isspace():
                 prev, prev_word = c, ""

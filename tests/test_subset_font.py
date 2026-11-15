@@ -36,6 +36,17 @@ class CharacterCollectionTests(unittest.TestCase):
         self.assertIn("星", chars)
         self.assertTrue(set("龍願").isdisjoint(chars))
 
+    def test_division_after_postfix_does_not_swallow_strings(self):
+        chars = self.chars('x = a++ / b; const s = "星愿"; y = c-- / 2;\nconst t = "令"; z = d / 2;')
+        self.assertTrue(set("星愿令") <= chars)
+        regex_chars = self.chars(r'const s = a + /"\u9f8d"/; output.textContent = "星";')
+        self.assertIn("星", regex_chars)
+        self.assertNotIn("龍", regex_chars)
+
+    def test_regex_scan_stops_at_line_terminator(self):
+        chars = self.chars('x = a + /unterminated\nconst s = "星愿令"; y = b / 2;')
+        self.assertTrue(set("星愿令") <= chars)
+
     def test_invalid_scalars_do_not_break_collection(self):
         chars = self.chars(r'const text="\uD800\u{110000}\u661f";')
         self.assertIn("星", chars)
