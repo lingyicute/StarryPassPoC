@@ -20,14 +20,26 @@ const PRECACHE_URLS = [
 const NETWORK_TIMEOUT_MS = 3000;
 const STATIC_URLS = new Set(PRECACHE_URLS.map((url) => new URL(url, APP_ROOT).href));
 
+async function precache() {
+    const cache = await caches.open(VERSION);
+    // "./" 与 "./index.html" 是同一份首页，只下载后者；根路径离线时同样回退到它。
+    const requests = PRECACHE_URLS.filter((url) => url !== "./").map((url) =>
+        new Request(new URL(url, APP_ROOT), { cache: "reload" }));
+    await cache.addAll(requests);
+    // addAll 会原样保存重定向得到的响应；带 redirected 标记的 shell 在离线导航（redirect: manual）
+    // 时会被浏览器拒收，因此用同一正文与头部重建响应以去掉该标记。
+    await Promise.all(requests.map(async (request) => {
+        const response = await cache.match(request);
+        if (!response || !response.redirected) return;
+        const body = await response.blob();
+        await cache.put(request, new Response(body, {
+            status: response.status, statusText: response.statusText, headers: response.headers
+        }));
+    }));
+}
+
 self.addEventListener("install", (event) => {
-    event.waitUntil(
-        caches.open(VERSION)
-            // "./" 与 "./index.html" 是同一份首页，只下载后者；根路径离线时同样回退到它。
-            .then((cache) => cache.addAll(PRECACHE_URLS.filter((url) => url !== "./").map((url) =>
-                new Request(new URL(url, APP_ROOT), { cache: "reload" }))))
-            .then(() => self.skipWaiting())
-    );
+    event.waitUntil(precache().then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {

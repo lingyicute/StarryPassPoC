@@ -4,14 +4,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const base = 'https://example.test/app/';
-const handlers = {}, stores = new Map(), installs = [];
+const handlers = {}, stores = new Map(), installs = [], redirectedInstalls = new Set();
 let fetchImpl, putGate = null, putError = null, openError = null, matchError = null, networkCalls = 0, checks = 0;
 const check = (fn) => { fn(); checks++; };
 const key = (request) => new URL(typeof request === 'string' ? request : request.url, base).href;
 function cachedMatch(name, request) {
     if (matchError === 'all' || matchError === name) throw new Error('INJECTED_cache_match');
     const response = stores.get(name)?.get(key(request));
-    return response && response.clone();
+    if (!response) return response;
+    const copy = response.clone();
+    // 与浏览器一致：CacheStorage 会保留响应的重定向标记。
+    if (response.redirected) Object.defineProperty(copy, 'redirected', { value: true });
+    return copy;
 }
 const caches = {
     async match(request, options = {}) {
@@ -32,7 +36,11 @@ const caches = {
             },
             async addAll(requests) {
                 installs.push(...requests);
-                for (const request of requests) store.set(key(request), new Response('INSTALLED ' + key(request)));
+                for (const request of requests) {
+                    const response = new Response('INSTALLED ' + key(request));
+                    if (redirectedInstalls.has(key(request))) Object.defineProperty(response, 'redirected', { value: true });
+                    store.set(key(request), response);
+                }
             }
         };
     },
@@ -82,8 +90,15 @@ async function checkText(e, expected) {
     const text = await responseText(e); check(() => assert.equal(text, expected));
 }
 (async () => {
+    // 托管方把 index.html 重定向（如 /index.html → /）时，addAll 存下的是带 redirected 标记的响应。
+    redirectedInstalls.add(names.SHELL_URL);
     const install = event('install');
     await finish(install);
+    const installedShell = stores.get(names.VERSION).get(names.SHELL_URL);
+    check(() => assert.equal(installedShell.redirected, false, 'precached shell must not keep the redirect flag'));
+    check(() => assert.equal(installedShell.status, 200));
+    const installedText = await installedShell.clone().text();
+    check(() => assert.equal(installedText, 'INSTALLED ' + names.SHELL_URL));
     check(() => assert.ok(installs.some((r) => r.url.endsWith('/manifest.webmanifest'))));
     // "./" 与 "./index.html" 是同一份首页：安装时只下载一次。
     check(() => assert.deepEqual(installs.filter((r) => /\/(index\.html)?$/.test(new URL(r.url).pathname))
