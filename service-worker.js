@@ -68,21 +68,26 @@ function cacheKeyRequest(request, url) {
 }
 
 async function cachedResponse(request, navigation) {
-    const shellRequest = cacheKeyRequest(request, SHELL_URL);
-    const rootRequest = cacheKeyRequest(request, APP_ROOT.href);
     // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
     if (isShellRequest(request) && (navigation || STATIC_URLS.has(request.url))) {
+        const shellRequest = cacheKeyRequest(request, SHELL_URL);
+        const rootRequest = cacheKeyRequest(request, APP_ROOT.href);
         const distinctReq = request.url !== SHELL_URL && request.url !== APP_ROOT.href;
         return (await matchCached(RUNTIME, shellRequest)) || (distinctReq && await matchCached(RUNTIME, request))
             || (await matchCached(RUNTIME, rootRequest)) || (distinctReq && await matchCached(VERSION, request))
             || (await matchCached(VERSION, shellRequest)) || (await matchCached(VERSION, rootRequest));
     }
+    if (!navigation) {
+        return (await matchCached(RUNTIME, request)) || (await matchCached(VERSION, request));
+    }
+    const shellRequest = cacheKeyRequest(request, SHELL_URL);
+    const rootRequest = cacheKeyRequest(request, APP_ROOT.href);
     return (await matchCached(RUNTIME, request))
-        || (navigation && await matchCached(RUNTIME, shellRequest))
-        || (navigation && await matchCached(RUNTIME, rootRequest))
+        || (await matchCached(RUNTIME, shellRequest))
+        || (await matchCached(RUNTIME, rootRequest))
         || (await matchCached(VERSION, request))
-        || (navigation && await matchCached(VERSION, shellRequest))
-        || (navigation && await matchCached(VERSION, rootRequest));
+        || (await matchCached(VERSION, shellRequest))
+        || (await matchCached(VERSION, rootRequest));
 }
 
 function cancelBody(response) {
