@@ -971,7 +971,14 @@
                     for (var i = 0; len > 0; i++, len--) {
                         if (len <= MAX_WEAK_ROOT_LEN && isWeakRoot(value.slice(0, len))) return true;
                         var p = len - fail[len - 1];
-                        if (p > 0 && p * 2 <= len && check(p)) return true;
+                        if (p > 0 && p * 2 <= len) {
+                            if (check(p)) return true;
+                            // 弱口令自身含循环节（如 zaq1zaq1、000000、121212）时，重复串的最短周期小于词根长度。
+                            var maxMult = Math.min(len >>> 1, MAX_WEAK_ROOT_LEN + 8);
+                            for (var mult = p * 2; mult <= maxMult; mult += p) {
+                                if (check(mult)) return true;
+                            }
+                        }
                         if (i >= 8 || !WEAK_SUFFIX_RE.test(value.charAt(len - 1))) return false;
                     }
                     return false;

@@ -145,10 +145,19 @@ for (const nested of [('ab'.repeat(40) + 'c').repeat(2), ('ab'.repeat(40) + 'c')
 }
 assert.equal(estimate(('ab'.repeat(40) + 'c').repeat(2)).bits, estimate('ab'.repeat(40) + 'c').bits + 1,
     'doubling a string with an internal repeat adds only one bit');
-// Repeating a weak root or date must not bypass the weak-root / date checks.
+// Repeating a weak root or date must not bypass the weak-root / date checks,
+// including roots that are themselves periodic (zaq1zaq1, 000000, 121212, ...).
 for (const value of ['P@ssw0rd2026!'.repeat(2), 'Administrator2026!'.repeat(2),
-    'Passwordpassword', 'passwordpassword2026!']) {
+    'Passwordpassword', 'passwordpassword2026!',
+    'zaq1zaq1'.repeat(2), 'zaq1zaq1'.repeat(2) + '2026!',
+    '000000'.repeat(3), '000000'.repeat(3) + '!',
+    '121212'.repeat(3), '111111'.repeat(3), '666666'.repeat(3), '7777777'.repeat(3)]) {
     expectWeak(value);
+}
+{
+    const t0 = performance.now();
+    assert.equal(context.hasWeakRoot('a'.repeat(20000)), false);
+    assert.ok(performance.now() - t0 < 500, 'periodic multiple check stays linear on long runs');
 }
 for (const dateVal of ['20000101'.repeat(2), '20120120', '20220220', '20120120'.repeat(2)]) {
     assert.deepEqual(estimate(dateVal), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
