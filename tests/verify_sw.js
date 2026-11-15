@@ -272,6 +272,20 @@ async function checkText(e, expected) {
         check(() => assert.equal(rawCanceled, true, 'timeout cancels raw response when body stream ignores abort'));
         check(() => assert.equal(probeCanceled, true, 'timeout cancels probe clone when body stream ignores abort'));
     }
+    // 真实 ReadableStream 被读取时处于 locked 状态：超时必须通过 reader.cancel() 关闭底层流。
+    {
+        let underlyingCanceled = false;
+        fetchImpl = async () => new Response(new ReadableStream({
+            start(controller) { controller.enqueue(new TextEncoder().encode('PARTIAL')); },
+            cancel() { underlyingCanceled = true; }
+        }));
+        const hungStream = event('fetch', req());
+        await tick();
+        expireNetwork();
+        await checkText(hungStream, 'NEW SHELL'); await finish(hungStream);
+        await tick();
+        check(() => assert.equal(underlyingCanceled, true, 'timeout cancels locked ReadableStream probe and closes tee source'));
+    }
 
     // 无缓存时返回网络错误，不能留下永不 settle 的响应或后台写入。
     fetchImpl = () => new Promise(() => {});

@@ -107,14 +107,19 @@ function putInRuntimeCache(request, response, navigation) {
 // 截止时间覆盖响应头及应用资源的完整正文，避免半开连接阻塞缓存兜底。
 async function fetchWithTimeout(request, navigation) {
     const controller = new AbortController();
-    let timer, rawResponse = null, probeResponse = null;
+    let timer, rawResponse = null, probeResponse = null, probeReader = null;
+    const cancelPending = () => {
+        const reader = probeReader, probe = probeResponse, raw = rawResponse;
+        probeReader = null;
+        probeResponse = null;
+        rawResponse = null;
+        if (reader) reader.cancel().catch(() => {});
+        else cancelBody(probe);
+        cancelBody(raw);
+    };
     const timeout = new Promise((_, reject) => {
         timer = setTimeout(() => {
-            const probe = probeResponse, raw = rawResponse;
-            probeResponse = null;
-            rawResponse = null;
-            cancelBody(probe);
-            cancelBody(raw);
+            cancelPending();
             reject(new Error("NETWORK_TIMEOUT"));
             controller.abort();
         }, NETWORK_TIMEOUT_MS);
@@ -130,17 +135,25 @@ async function fetchWithTimeout(request, navigation) {
                     // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
                     // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
                     probeResponse = response.clone();
-                    await probeResponse.arrayBuffer();
+                    if (probeResponse.body && typeof probeResponse.body.getReader === "function") {
+                        const reader = probeResponse.body.getReader();
+                        probeReader = reader;
+                        try {
+                            while (!(await reader.read()).done) {}
+                        } finally {
+                            if (probeReader === reader) probeReader = null;
+                            reader.releaseLock();
+                        }
+                    } else {
+                        await probeResponse.arrayBuffer();
+                    }
                     probeResponse = null;
                     if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
                 }
                 rawResponse = null;
                 return response;
             } catch (err) {
-                cancelBody(probeResponse);
-                probeResponse = null;
-                cancelBody(rawResponse);
-                rawResponse = null;
+                cancelPending();
                 throw err;
             }
         });
