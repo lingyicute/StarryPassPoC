@@ -48,6 +48,28 @@ def _strip_css_comments(css):
     return "".join(out)
 
 
+
+_JS_CHAR_ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2}))")
+
+
+def _read_js_escape(code, pos):
+    match = _JS_CHAR_ESCAPE.match(code, pos)
+    if not match:
+        return code[pos:pos + 2], pos + 2
+    value = int(next(group for group in match.groups() if group is not None), 16)
+    end = match.end()
+    if 0xD800 <= value <= 0xDBFF:
+        following = _JS_CHAR_ESCAPE.match(code, end)
+        if following:
+            low = int(next(group for group in following.groups() if group is not None), 16)
+            if 0xDC00 <= low <= 0xDFFF:
+                return chr(0x10000 + ((value - 0xD800) << 10) + low - 0xDC00), following.end()
+    if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:
+        # Invalid/unpaired scalar values have no usable cmap entry.
+        return "", end
+    return chr(value), end
+
+
 def _extract_js_strings(code):
     out, i, n = [], 0, len(code)
     prev, prev_word = "", ""
@@ -56,8 +78,8 @@ def _extract_js_strings(code):
     def scan_template(pos):
         while pos < n:
             if code[pos] == "\\" and pos + 1 < n:
-                out.append(code[pos:pos + 2])
-                pos += 2
+                decoded, pos = _read_js_escape(code, pos)
+                out.append(decoded)
             elif code[pos:pos + 2] == "${":
                 tpl_braces.append(0)
                 return pos + 2, "{", ""
@@ -74,8 +96,8 @@ def _extract_js_strings(code):
             i += 1
             while i < n:
                 if code[i] == "\\" and i + 1 < n:
-                    out.append(code[i:i + 2])
-                    i += 2
+                    decoded, i = _read_js_escape(code, i)
+                    out.append(decoded)
                 elif code[i] == c:
                     i += 1
                     break
