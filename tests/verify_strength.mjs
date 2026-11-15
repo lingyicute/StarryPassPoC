@@ -43,6 +43,13 @@ for (const value of [
     'Password123!', 'P@ssw0rd2026!', 'admin12345678', 'abc123!',
     '1q2w3e4r5t2026!', '12345678910!', 'trustno1!', '1234562026!'
 ]) expectWeak(value);
+// The same decoration characters may also precede a root, within the same 8-character bound.
+for (const root of roots) {
+    for (const variant of ['2026!' + root, '!@#$%^&*' + root, '1' + root.toUpperCase() + '!']) expectWeak(variant);
+}
+for (const value of ['2024Password!', '#iloveyou#', '!Password', '2024@admin', '2024password', '123!P@ssw0rd2026!']) {
+    expectWeak(value);
+}
 // Every supported suffix character; never broaden to letters, spaces, or Unicode.
 for (const ch of '0123456789!@#$%^&*()_+-=[]{};:"\\|,.<>/?~`') expectWeak('flowerpassword' + ch);
 for (const value of [
@@ -52,6 +59,7 @@ for (const value of [
     'flowerpassword!!!!!!!!!', 'flowerpassword123456789',
     'flowerpasswordX', 'flowerpassword ', 'flowerpassword。',
     'prefixpassword', 'password-long-unrelated-phrase',
+    '!!!!!!!!!password', '123456789password', ' password', 'x2026!password', '2026 password',
     'Cobalt lanterns drift beyond the violet horizon 82!',
     '星河轻拂远山，今夜仍有微光。', 'Étoiles brillantes au-dessus du jardin 🌠'
 ]) {

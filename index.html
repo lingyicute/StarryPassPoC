@@ -958,6 +958,15 @@
             }
 
             function hasWeakRoot(value) {
+                // 修饰字符同样常加在词根之前（如 2026!password）：至多跳过 8 个前缀修饰字符，再按原规则判断。
+                for (var start = 0; start <= 8 && start < value.length; start++) {
+                    if (start > 0 && !WEAK_SUFFIX_RE.test(value.charAt(start - 1))) return false;
+                    if (hasWeakRootFrom(start > 0 ? value.slice(start) : value)) return true;
+                }
+                return false;
+            }
+
+            function hasWeakRootFrom(value) {
                 var n = value.length;
                 if (!n) return false;
                 // 一次 KMP 即可 O(1) 查询任意前缀的最短循环节，并按前缀长度去重避免指数级递归。
