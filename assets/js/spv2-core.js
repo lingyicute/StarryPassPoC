@@ -391,16 +391,6 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     function buildWasmModule() {
         function uleb(n) { var o = []; do { var b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); } while (n); return o; }
-        function sleb(n) {
-            var o = [], more = true;
-            while (more) {
-                var b = n & 0x7f; n >>= 7;
-                if ((n === 0 && (b & 0x40) === 0) || (n === -1 && (b & 0x40) !== 0)) more = false;
-                else b |= 0x80;
-                o.push(b);
-            }
-            return o;
-        }
         function sec(id, body) { return [id].concat(uleb(body.length), body); }
         var OP = {
             LOOP: 0x03, IF: 0x04, ELSE: 0x05, END: 0x0b, BR_IF: 0x0d,
@@ -409,9 +399,9 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             I64_ADD: 0x7c, I64_MUL: 0x7e, I64_XOR: 0x85, I64_SHL: 0x86, I64_ROTR: 0x8a,
             I32_WRAP_I64: 0xa7, I64_EXTEND_I32_U: 0xad
         };
-        // 行置换直接读入 X^Y 并写入 R，列置换在局部变量完成 8 次 G 后直接异或 R 写回目标块，
-        // 省去独立的初始化/写回循环、每块 512 次 64 位内存读写与 120 次分支。
-        var I = 5, BASE = 6, ZPTR = 7, BX = 8, BY = 9, BR = 10, V0 = 11;
+        // RFC 9106 下输出块永不与输入块 X/Y 重叠：行置换直接将 R=X^Y 暂存进输出块，
+        // 列置换只需将 Z 异或写回输出块，省去独立的 R 暂存区及列循环内的分支与读写。
+        var I = 5, BASE = 6, BX = 7, BY = 8, BR = 9, V0 = 10;
         function step(X, Y, Z, R) {
             return [
                 OP.LGET, X, OP.LGET, Y, OP.I64_ADD,
@@ -431,51 +421,50 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             gRound(0,5,10,15), gRound(1,6,11,12), gRound(2,7,8,13), gRound(3,4,9,14)
         );
         var colWords = [0,1,16,17,32,33,48,49,64,65,80,81,96,97,112,113];
-        var rowLoad = [], rowStore = [], colLoad = [], colWriteXor = [], colWriteSet = [], k, off;
+        var rowLoadSet = [], rowLoadXor = [], rowStore = [], colLoad = [], colWrite = [], k, off;
         for (k = 0; k < 16; k++) {
             off = uleb(k * 8);
-            rowLoad = rowLoad.concat(
+            rowLoadSet = rowLoadSet.concat(
                 [OP.LGET, BR],
                 [OP.LGET, BX, OP.I64_LD, 3], off,
                 [OP.LGET, BY, OP.I64_LD, 3], off,
                 [OP.I64_XOR, OP.LTEE, V0 + k, OP.I64_ST, 3], off
             );
+            rowLoadXor = rowLoadXor.concat(
+                [OP.LGET, BR],
+                [OP.LGET, BR, OP.I64_LD, 3], off,
+                [OP.LGET, BX, OP.I64_LD, 3], off,
+                [OP.LGET, BY, OP.I64_LD, 3], off,
+                [OP.I64_XOR, OP.LTEE, V0 + k, OP.I64_XOR, OP.I64_ST, 3], off
+            );
             rowStore = rowStore.concat([OP.LGET, BASE, OP.LGET, V0 + k, OP.I64_ST, 3], off);
             off = uleb(colWords[k] * 8);
             colLoad = colLoad.concat([OP.LGET, BASE, OP.I64_LD, 3], off, [OP.LSET, V0 + k]);
-            colWriteXor = colWriteXor.concat(
+            colWrite = colWrite.concat(
                 [OP.LGET, BX],
                 [OP.LGET, BX, OP.I64_LD, 3], off,
-                [OP.LGET, BR, OP.I64_LD, 3], off,
-                [OP.I64_XOR, OP.LGET, V0 + k, OP.I64_XOR, OP.I64_ST, 3], off
-            );
-            colWriteSet = colWriteSet.concat(
-                [OP.LGET, BX],
-                [OP.LGET, BR, OP.I64_LD, 3], off,
                 [OP.LGET, V0 + k, OP.I64_XOR, OP.I64_ST, 3], off
             );
         }
         var fn1 = [
-            2, 6, 0x7f, 16, 0x7e,
-            OP.LGET, 4, OP.I32_C].concat(sleb(1024), [OP.I32_ADD, OP.LSET, ZPTR,
+            2, 5, 0x7f, 16, 0x7e,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
                 OP.LGET, I, OP.I32_C, 7, OP.I32_SHL, OP.LTEE, BASE,
                 OP.LGET, 0, OP.I32_ADD, OP.LSET, BX,
                 OP.LGET, BASE, OP.LGET, 1, OP.I32_ADD, OP.LSET, BY,
-                OP.LGET, BASE, OP.LGET, 4, OP.I32_ADD, OP.LSET, BR,
-                OP.LGET, BASE, OP.LGET, ZPTR, OP.I32_ADD, OP.LSET, BASE],
-                rowLoad, gBlock, rowStore, [
+                OP.LGET, BASE, OP.LGET, 2, OP.I32_ADD, OP.LSET, BR,
+                OP.LGET, BASE, OP.LGET, 4, OP.I32_ADD, OP.LSET, BASE,
+                OP.LGET, 3, OP.IF, 0x40].concat(rowLoadXor, [OP.ELSE], rowLoadSet, [OP.END],
+                gBlock, rowStore, [
                 OP.LGET, I, OP.I32_C, 1, OP.I32_ADD, OP.LTEE, I, OP.I32_C, 8, OP.I32_LTU, OP.BR_IF, 0,
             OP.END,
             OP.I32_C, 0, OP.LSET, I,
             OP.LOOP, 0x40,
                 OP.LGET, I, OP.I32_C, 4, OP.I32_SHL, OP.LTEE, BASE,
                 OP.LGET, 2, OP.I32_ADD, OP.LSET, BX,
-                OP.LGET, BASE, OP.LGET, 4, OP.I32_ADD, OP.LSET, BR,
-                OP.LGET, BASE, OP.LGET, ZPTR, OP.I32_ADD, OP.LSET, BASE],
-                colLoad, gBlock, [
-                OP.LGET, 3, OP.IF, 0x40], colWriteXor, [OP.ELSE], colWriteSet, [OP.END,
+                OP.LGET, BASE, OP.LGET, 4, OP.I32_ADD, OP.LSET, BASE],
+                colLoad, gBlock, colWrite, [
                 OP.LGET, I, OP.I32_C, 1, OP.I32_ADD, OP.LTEE, I, OP.I32_C, 8, OP.I32_LTU, OP.BR_IF, 0,
             OP.END, OP.END
         ]);
