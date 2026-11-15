@@ -327,4 +327,16 @@ check(() => assert.equal(
     check(() => assert.equal(quiet.sent.length, 1));
     check(() => assert.equal(quiet.sent[0].cached, true));
 }
+// 自检须覆盖单块 SHA-256（短代号的盐）与 HKDF 的后续展开块：只破坏其一也必须拒绝派生。
+for (const [from, to, expected] of [
+    ['padded[len] = 0x80;', 'padded[len] = padLen === 64 ? 0x81 : 0x80;', 'KAT_SHA256_FAILED'],
+    ['inBlk[prev.length + info.length] = idx;', 'inBlk[prev.length + info.length] = prev.length ? idx + 1 : idx;', 'KAT_HKDF_FAILED']
+]) {
+    const faulty = loadCore({}, (src) => {
+        assert.equal(src.split(from).length, 2, 'fault injection point must match exactly once');
+        return src.replace(from, to);
+    })(null, false);
+    check(() => assert.throws(() => faulty.deriveSync(request), { message: expected }));
+    check(() => assert.equal(faulty._test.state().cachedSk, null));
+}
 console.log(`PASS core: ${checks} parameter, engine, cache and cleanup checks`);

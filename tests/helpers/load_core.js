@@ -19,13 +19,14 @@ const instrumented = source.replace(anchor, `${anchor},
                     JS_R: JS_R, JS_Z: JS_Z };
             }
         }`);
-module.exports = function loadCore(overrides = {}) {
+// transform 只用于在测试副本中注入故障，验证自检确实覆盖对应路径。
+module.exports = function loadCore(overrides = {}, transform = (src) => src) {
     const context = {
         module: { exports: {} }, TextEncoder, Uint8Array, Int32Array, ArrayBuffer, RangeError,
         WebAssembly, crypto: webcrypto, console, ...overrides
     };
     // 在当前 realm 编译，以免 VM 全局代理使纯 JS Argon2 热循环慢数十倍。
-    const build = vm.compileFunction(instrumented + '\nreturn module.exports.spv2CoreFactory;',
+    const build = vm.compileFunction(transform(instrumented) + '\nreturn module.exports.spv2CoreFactory;',
         Object.keys(context), { filename: 'spv2-core.test-probe.js' });
     return build(...Object.values(context));
 };

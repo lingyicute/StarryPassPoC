@@ -176,6 +176,19 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
     }
 
+    // HKDF-Expand 的单个输出块 T(i) = HMAC(PRK, T(i-1) ‖ info ‖ i)；派生与自检共用这一实现。
+    function hkdfExpandBlock(prk, prev, info, idx) {
+        var inBlk = new Uint8Array(prev.length + info.length + 1);
+        try {
+            inBlk.set(prev, 0);
+            inBlk.set(info, prev.length);
+            inBlk[prev.length + info.length] = idx;
+            return hmacSha256(prk, inBlk);
+        } finally {
+            zeroize(inBlk);
+        }
+    }
+
     /* ---------- BLAKE2b (RFC 7693) ---------- */
     var BLAKE2B_IV = new Int32Array([
         0xf3bcc908 | 0, 0x6a09e667 | 0, 0x84caa73b | 0, 0xbb67ae85 | 0,
@@ -729,19 +742,11 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                 if (streamPos >= streamBuf.length) {
                     blockIdx++;
                     if (blockIdx > 255) throw new Error('HKDF_EXHAUSTED');
-                    var inBlk = new Uint8Array(prev.length + info.length + 1);
-                    try {
-                        inBlk.set(prev, 0);
-                        inBlk.set(info, prev.length);
-                        inBlk[prev.length + info.length] = blockIdx;
-                        var next = hmacSha256(prk, inBlk);
-                        zeroize(prev);
-                        prev = next;
-                        streamBuf.set(prev);
-                        streamPos = 0;
-                    } finally {
-                        zeroize(inBlk);
-                    }
+                    var next = hkdfExpandBlock(prk, prev, info, blockIdx);
+                    zeroize(prev);
+                    prev = next;
+                    streamBuf.set(prev);
+                    streamPos = 0;
                 }
                 return streamBuf[streamPos++];
             }
@@ -803,7 +808,7 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         if (pureOnly ? pureJsTested : selfTestPassed) return;
         var p = new Uint8Array(32).fill(1), s = new Uint8Array(16).fill(2);
         var k = new Uint8Array(8).fill(3), x = new Uint8Array(12).fill(4);
-        var tag, tcSalt, tcIkm, prk;
+        var tag, abc, digest, tcSalt, tcIkm, tcInfo, prk, noPrev, t1, t2, okm;
         try {
             // 1. RFC 9106 §5.3 Argon2id KAT
             tag = argon2idSync({ password: p, salt: s, secret: k, ad: x, memoryKiB: 32, passes: 3, parallelism: 4, tagLength: 32 }, pureOnly);
@@ -816,13 +821,27 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                 if (tag[i] !== expectedA2[i]) throw new Error('KAT_ARGON2ID_FAILED');
             }
 
-            // 2. RFC 5869 TC1 HMAC/SHA-256 KAT (first 8 bytes of PRK = 077709362c2e32df)
+            // 2. SHA-256("abc")：短代号的盐只走单块消息路径，下面的 HMAC 用例只覆盖多块消息。
+            abc = new Uint8Array([0x61, 0x62, 0x63]);
+            digest = sha256(abc);
+            if (!constantTimeEqual(digest, hexBytes('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'))) {
+                throw new Error('KAT_SHA256_FAILED');
+            }
+
+            // 3. RFC 5869 A.1：完整 PRK 与 42 字节 OKM，覆盖派生实际使用的 T(i-1) 链接与块序号。
             tcSalt = new Uint8Array([0,1,2,3,4,5,6,7,8,9,10,11,12]);
             tcIkm = new Uint8Array(22).fill(0x0b);
+            tcInfo = new Uint8Array([0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9]);
             prk = hmacSha256(tcSalt, tcIkm);
-            var expectedPrk8 = [0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf];
-            for (var j = 0; j < 8; j++) {
-                if (prk[j] !== expectedPrk8[j]) throw new Error('KAT_SHA256_FAILED');
+            if (!constantTimeEqual(prk, hexBytes('077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5'))) {
+                throw new Error('KAT_SHA256_FAILED');
+            }
+            noPrev = new Uint8Array(0);
+            t1 = hkdfExpandBlock(prk, noPrev, tcInfo, 1);
+            t2 = hkdfExpandBlock(prk, t1, tcInfo, 2);
+            okm = hexBytes('3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865');
+            if (!constantTimeEqual(t1, okm.subarray(0, 32)) || !constantTimeEqual(t2.subarray(0, 10), okm.subarray(32))) {
+                throw new Error('KAT_HKDF_FAILED');
             }
             if (!viaWasm) {
                 pureJsTested = true;
@@ -832,8 +851,16 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             if (!pureOnly) selfTestPassed = true;
         } finally {
             zeroize(p); zeroize(s); zeroize(k); zeroize(x);
-            zeroize(tag); zeroize(tcSalt); zeroize(tcIkm); zeroize(prk);
+            zeroize(tag); zeroize(abc); zeroize(digest);
+            zeroize(tcSalt); zeroize(tcIkm); zeroize(tcInfo); zeroize(prk);
+            zeroize(t1); zeroize(t2); zeroize(okm);
         }
+    }
+
+    function hexBytes(hex) {
+        var out = new Uint8Array(hex.length >>> 1);
+        for (var i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i << 1, (i << 1) + 2), 16);
+        return out;
     }
 
     /* ---------- Ephemeral Single-Slot Session Key Cache (Zeroized on Wipe/Change) ---------- */
