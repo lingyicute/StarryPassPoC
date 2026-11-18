@@ -157,6 +157,8 @@ assert.equal(estimate(('ab'.repeat(40) + 'c').repeat(2)).bits, estimate('ab'.rep
 // including roots that are themselves periodic (zaq1zaq1, 000000, 121212, ...).
 for (const value of ['P@ssw0rd2026!'.repeat(2), 'Administrator2026!'.repeat(2),
     'Passwordpassword', 'passwordpassword2026!',
+    '2026!Password'.repeat(2), '2026!P@ssw0rd2026!'.repeat(2) + '!',
+    '!@#$%^&*flowerpassword12345678'.repeat(2),
     'zaq1zaq1'.repeat(2), 'zaq1zaq1'.repeat(2) + '2026!',
     '000000'.repeat(3), '000000'.repeat(3) + '!',
     '121212'.repeat(3), '111111'.repeat(3), '666666'.repeat(3), '7777777'.repeat(3)]) {
