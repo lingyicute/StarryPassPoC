@@ -139,6 +139,29 @@ async def test_queue(browser, url):
         await page.fill('#counter-input', '02')
         check(await page.is_enabled('#copy-btn') and await page.inner_text('#password-output') == FAKE_PASSWORD,
               'counter input without clamped value change preserves derived password')
+        await page.fill('#counter-input', '3')
+        await page.clock.run_for(300)
+        stale = (await requests(page))[-1]
+        await page.eval_on_selector('#counter-input', "el => { el.value = '07'; }")
+        await reply(page, stale)
+        check(not await page.is_enabled('#copy-btn'), 'a silent focused counter edit rejects an in-flight stale result')
+        await page.clock.run_for(300)
+        fresh = (await requests(page))[-1]
+        check(fresh['id'] != stale['id'] and fresh['counter'] == 7 and await page.input_value('#counter-input') == '07',
+              'silent counter recovery uses the live number without rewriting focused text')
+        await reply(page, fresh)
+        await page.fill('#code-input', 'active-before-silent')
+        await page.clock.run_for(300)
+        active = (await requests(page))[-1]
+        await page.fill('#code-input', 'queued-before-silent')
+        await page.clock.run_for(300)
+        await page.eval_on_selector('#code-input', "el => { el.value = 'live-after-queue'; }")
+        await reply(page, active)
+        check(not await page.is_enabled('#copy-btn'), 'a silently invalidated queued request does not render the active result')
+        await page.clock.run_for(300)
+        fresh = (await requests(page))[-1]
+        check(fresh['code'] == 'live-after-queue', 'after the queue drains, refresh picks up the silent site-code edit')
+        await reply(page, fresh)
         await page.fill('#counter-input', '100000')
         await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])

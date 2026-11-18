@@ -1388,7 +1388,7 @@
                     stopWorker();  // 先终止卡住的计算，不能把新任务继续排到同一个 Worker 后面。
                     if (isCurrent(next)) dispatch(next);
                     else if (isCurrent(payload)) showEmpty('派生超时，请重试');
-                    else setBusy(!!debounceTimer);
+                    else if (!recoverSilentEdit(next || payload)) setBusy(!!debounceTimer);
                 }, 60000);
             }
 
@@ -1396,7 +1396,15 @@
                 return payload && payload.id === deriveId
                     && payload.master === masterInput.value && payload.code === codeInput.value
                     && payload.tier === state.tier && payload.mode === state.mode
-                    && payload.counter === state.counter && payload.length === effectiveLength();
+                    && payload.counter === readCounter() && payload.length === effectiveLength();
+            }
+
+            function recoverSilentEdit(payload) {
+                // A newer input event already has its own refresh. Otherwise a
+                // silent edit must not leave the page stuck on a stale task.
+                if (!payload || payload.id !== deriveId || isCurrent(payload)) return false;
+                scheduleRefresh();
+                return true;
             }
 
             function stopWorker() {
@@ -1463,6 +1471,7 @@
                 var next = pendingPayload;
                 pendingPayload = null;
                 if (isCurrent(next)) { dispatch(next); return; }
+                if (recoverSilentEdit(next || payload)) return;
                 if (masterInput.value === '' || codeInput.value.trim() === '') wipeEngines();
                 setBusy(!!debounceTimer);
             }
@@ -1473,7 +1482,8 @@
             }
 
             function fallbackToLocal() {
-                var shouldRetry = isCurrent(pendingPayload) || isCurrent(currentPayload);
+                var latest = pendingPayload || currentPayload;
+                var shouldRetry = latest && latest.id === deriveId;
                 stopWorker();
                 workerAllowed = false;
                 pendingPayload = null;
@@ -1523,7 +1533,8 @@
                 debounceTimer = null;
                 deriveId += 1;  // 输入/策略变化时立即作废，不能等 280 ms 防抖结束。
                 pendingPayload = null;
-                if (document.activeElement !== counterInput) clampCounter();
+                if (document.activeElement === counterInput) state.counter = readCounter();
+                else clampCounter();
                 var master = masterInput.value, code = codeInput.value;
                 var hasInput = master !== '' && code.trim() !== '';
                 if (!hasInput) wipeEngines();
@@ -1608,15 +1619,12 @@
                 // Autofill and programmatic value changes may not fire input.
                 if (!isCurrent(renderedPayload)) { scheduleRefresh(); return; }
                 var text = output.textContent, copiedId = renderedPayload.id;
-                function matchesInputs() {
-                    return isCurrent(renderedPayload) && readCounter() === renderedPayload.counter;
-                }
                 function isStillValid() {
-                    return copiedId === deriveId && matchesInputs() && !copyBtn.disabled && output.textContent === text;
+                    return copiedId === deriveId && isCurrent(renderedPayload) && !copyBtn.disabled && output.textContent === text;
                 }
                 copyText(text, isStillValid).then(function (ok) {
                     if (!isStillValid()) {
-                        if (copiedId === deriveId && !matchesInputs()) scheduleRefresh();
+                        if (copiedId === deriveId && !isCurrent(renderedPayload)) scheduleRefresh();
                         return;
                     }
                     if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
