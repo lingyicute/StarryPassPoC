@@ -82,7 +82,9 @@ function event(type, request) {
     closed = true;
     return { waits, response };
 }
-const req = (url = 'index.html', mode = 'navigate', method = 'GET') => ({ url: new URL(url, base).href, mode, method });
+const req = (url = 'index.html', mode = 'navigate', method = 'GET', headers = {}) => ({
+    url: new URL(url, base).href, mode, method, headers: new Headers(headers)
+});
 const offline = async () => { throw new TypeError('offline'); };
 async function responseText(e) { return (await e.response).text(); }
 async function finish(e) { await Promise.all(e.waits); }
@@ -158,6 +160,11 @@ async function checkText(e, expected) {
     fetchImpl = offline;
     const offlineCore = event('fetch', req('assets/js/spv2-core.js', 'cors'));
     await checkText(offlineCore, 'NEW CORE'); await finish(offlineCore);
+
+    // A cached whole asset must not be substituted for a byte-range request.
+    const range = event('fetch', req('assets/js/spv2-core.js', 'cors', 'GET', { range: 'bytes=0-2' }));
+    check(() => assert.equal(range.response, undefined));
+    check(() => assert.equal(range.waits.length, 0));
 
     fetchImpl = async () => {
         const resp = new Response('REDIRECTED SHELL');

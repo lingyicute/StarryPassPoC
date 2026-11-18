@@ -167,7 +167,8 @@ async function fetchWithTimeout(request) {
 
 self.addEventListener("fetch", (event) => {
     const request = event.request;
-    if (request.method !== "GET") return;
+    // CacheStorage contains complete responses, not byte ranges.
+    if (request.method !== "GET" || request.headers.has("Range")) return;
     // 未列出的路由由浏览器正常处理，离线时不把无关页面或 API 伪装成首页。
     const key = managedCacheKey(request);
     if (!key) return;
