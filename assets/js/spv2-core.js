@@ -700,23 +700,45 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function argon2idSync(params, pureOnly, onLane) {
-        var spec = validateArgon2Params(params);
-        var ctx;
+        return runArgon2id(validateArgon2Params(params), pureOnly, onLane);
+    }
+
+    function runArgon2id(spec, pureOnly, onLane) {
+        var ctx, inProgress = false;
+        var notify = onLane && function () {
+            inProgress = true;
+            onLane();
+            inProgress = false;
+        };
         try {
             ctx = initArgon2Ctx(spec, pureOnly);
             lastArenaWasm = ctx.arena.isWasm;
             for (var pass = 0; pass < ctx.t; pass++) {
                 for (var slice = 0; slice < 4; slice++) {
-                    runArgon2Slice(ctx, pass, slice, onLane);
+                    runArgon2Slice(ctx, pass, slice, notify);
                 }
             }
             return finalizeArgon2Ctx(ctx);
+        } catch (err) {
+            // Recover only from an execution trap in an active WASM arena.
+            // A caller can throw the same error type from its progress callback.
+            if (!ctx || !ctx.arena.isWasm || inProgress || typeof WebAssembly !== 'object' || !WebAssembly
+                    || typeof WebAssembly.RuntimeError !== 'function' || !(err instanceof WebAssembly.RuntimeError)) throw err;
+            forcePureJs = true;
+            wasmState = null;
         } finally {
             // 覆盖整个 arena（包括增长后的尾部），异常路径也必须执行；不代表归还内存。
             if (ctx) zeroize(ctx.arena.u8);
             else if (wasmState && wasmState.mem) new Uint8Array(wasmState.mem.buffer).fill(0);
             zeroize(SHA256_W); zeroize(B2B_V); zeroize(B2B_M); zeroize(JS_R); zeroize(JS_Z);
         }
+        if (typeof console === 'object' && console && typeof console.warn === 'function') {
+            try { console.warn('[spv2] WASM execution failed; using pure JS.'); } catch (_) {}
+        }
+        // At cold start the retry itself is the Argon2id KAT. At runtime,
+        // validate the JS kernel before letting it see the original input.
+        if (selfTestPassed) runSelfTest(true);
+        return runArgon2id(spec, true, onLane);
     }
 
     /* ---------- Stage 2 & Stage 3: HKDF-SHA-256 + Zero-Bias Rejection Synthesis ---------- */

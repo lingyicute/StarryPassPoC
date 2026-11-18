@@ -173,6 +173,33 @@ check(() => assert.equal(warnings.length, 1));
 check(() => assert.match(warnings[0], /INJECTED_WASM_BLOCK/));
 fallback.wipeSession();
 
+// An execution trap, including on the first self-test, must erase the failed
+// WASM arena and use the same request only after validating the fallback.
+for (const warm of [false, true]) {
+    const allocations = [], warnings = [];
+    function CountBuffer(size) { allocations.push(size); return new ArrayBuffer(size); }
+    const engine = loadCore({ ArrayBuffer: CountBuffer, console: { warn: (msg) => warnings.push(msg) } })(null, false);
+    if (warm) engine.deriveSync({ ...request, code: 'warm-up-only' });
+    engine._test.getArena(40 * 1024);
+    const failed = engine._test.state().wasmState;
+    failed.fn = () => { throw new WebAssembly.RuntimeError('simulated execution trap'); };
+    check(() => assert.equal(engine.deriveSync(request).password, 'WueNKY^SRHRh4!DL'));
+    check(() => assert.deepEqual(allocations, [32 * 1024 + 6144, 65536 * 1024 + 6144], 'fallback KAT precedes the real KDF'));
+    check(() => assert.ok(allZero(new Uint8Array(failed.mem.buffer)), 'failed WASM memory was zeroed'));
+    check(() => assert.equal(engine._test.state().wasmState, null, 'failed instance is released'));
+    check(() => assert.equal(engine.deriveSync(request).cached, true));
+    check(() => assert.equal(warnings.length, 1));
+    check(() => assert.equal(engine._test.getArena(40 * 1024).isWasm, false, 'only the known-good provider is reused'));
+    engine.wipeSession();
+}
+{
+    const engine = factory(null, false);
+    const callbackError = new WebAssembly.RuntimeError('simulated callback error');
+    check(() => assert.throws(() => engine.deriveSync(request, () => { throw callbackError; }), (err) => err === callbackError));
+    check(() => assert.equal(engine._test.getArena(40 * 1024).isWasm, true, 'callback failure does not disable WASM'));
+    engine.wipeSession();
+}
+
 // 极高档的超大 WASM 内存被拒（RangeError）只影响该次请求；之后的标准档仍应使用 WASM，而不是永久退回纯 JS。
 {
     let denyLarge = true;
