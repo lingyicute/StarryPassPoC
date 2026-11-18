@@ -188,8 +188,13 @@ def _extract_js_strings(code):
             j = i + 1
             while j < n and (code[j].isalnum() or code[j] in ("_", "$")):
                 j += 1
-            # A property such as obj.if or obj.return is not a keyword.
-            prev_word = code[i:j] if prev != "." else ""
+            # A property such as obj.if is not a keyword. In a `for await`
+            # head, retain `for` so the closing paren permits a regex statement.
+            word = code[i:j]
+            if prev == ".":
+                prev_word = ""
+            elif not (prev_word == "for" and word == "await"):
+                prev_word = word
             prev = code[j - 1]
             i = j
         elif code[i:i + 2] in ("++", "--"):
