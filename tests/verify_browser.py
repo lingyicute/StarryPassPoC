@@ -408,6 +408,26 @@ async def test_copy_and_theme(browser, url):
         check(await page.evaluate('__execCopies') == 0, 'stale async clipboard rejection never falls back to execCommand copy')
         await page.clock.run_for(300)
         await reply(page, (await requests(page))[-1])
+        for field, value, expected in [('master', 'silent replacement master', 'silent replacement master'),
+                                       ('code', 'silent-site', 'silent-site'), ('counter', '7', 7)]:
+            writes = await page.evaluate('__copied.length')
+            await page.evaluate("([field, value]) => { document.getElementById(field + '-input').value = value; }", [field, value])
+            await page.click('#copy-btn')
+            check(await page.evaluate('__copied.length') == writes and await page.locator('#copy-btn').is_disabled(),
+                  f'silent {field} change prevents copying the previous result')
+            await page.clock.run_for(300)
+            latest = (await requests(page))[-1]
+            check(latest[field] == expected, f'silent {field} change is picked up by a new derivation')
+            await reply(page, latest)
+        await page.click('#copy-btn')
+        await page.evaluate("""() => {
+            document.getElementById('code-input').value = 'silent-before-copy-reject';
+            __rejectCopy(new Error('denied after silent change'));
+        }""")
+        check(await page.evaluate('__execCopies') == 0 and await page.locator('#copy-btn').is_disabled(),
+              'silent change while waiting also blocks fallback copy and invalidates the output')
+        await page.clock.run_for(300)
+        await reply(page, (await requests(page))[-1])
         await page.evaluate("""() => {
             navigator.clipboard.writeText = () => Promise.reject(new Error('denied'));
             document.execCommand = () => true;

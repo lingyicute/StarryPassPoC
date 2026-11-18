@@ -1142,7 +1142,7 @@
 
             var state = { length: 16, mode: 'full', counter: 1, tier: 'standard' };
             var deriveId = 0, debounceTimer = null, hasSession = false;
-            var worker = null, localEngine = null, currentPayload = null;
+            var worker = null, localEngine = null, currentPayload = null, renderedPayload = null;
             var pendingPayload = null, busy = false, watchdogTimer = null, workerAllowed = true;
 
             function ensureLocalEngine() {
@@ -1318,6 +1318,7 @@
             }
 
             function showEmpty(placeholder) {
+                renderedPayload = null;
                 output.textContent = placeholder;
                 output.removeAttribute('translate');
                 output.classList.add('password--empty');
@@ -1368,6 +1369,7 @@
                 pwdLength.textContent = pwd.length + ' 位';
                 // 用"产生这条口令的输入"和"实际输出长度"来评级，避免状态漂移
                 setStrength(estimateCrackResistance(payload.master, payload.code, payload.tier, payload.mode, pwd.length));
+                renderedPayload = payload;
             }
 
             function clearWatchdog() {
@@ -1602,15 +1604,21 @@
             var copyResetTimer = null;
             copyBtn.addEventListener('click', function () {
                 if (copyBtn.disabled) return;
-                var prevCounter = state.counter;
                 clampCounter();
-                if (state.counter !== prevCounter) { scheduleRefresh(); return; }
-                var text = output.textContent, copiedId = deriveId;
+                // Autofill and programmatic value changes may not fire input.
+                if (!isCurrent(renderedPayload)) { scheduleRefresh(); return; }
+                var text = output.textContent, copiedId = renderedPayload.id;
+                function matchesInputs() {
+                    return isCurrent(renderedPayload) && readCounter() === renderedPayload.counter;
+                }
                 function isStillValid() {
-                    return copiedId === deriveId && !copyBtn.disabled && output.textContent === text;
+                    return copiedId === deriveId && matchesInputs() && !copyBtn.disabled && output.textContent === text;
                 }
                 copyText(text, isStillValid).then(function (ok) {
-                    if (!isStillValid()) return;
+                    if (!isStillValid()) {
+                        if (copiedId === deriveId && !matchesInputs()) scheduleRefresh();
+                        return;
+                    }
                     if (!ok) { showSnackbar('复制失败，请手动选择密码'); return; }
                     showSnackbar('密码已复制到剪贴板');
                     copyBtn.classList.add('is-copied');
