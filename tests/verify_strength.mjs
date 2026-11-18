@@ -167,8 +167,23 @@ for (const value of ['P@ssw0rd2026!'.repeat(2), 'Administrator2026!'.repeat(2),
     assert.equal(context.hasWeakRoot('a'.repeat(20000)), false);
     assert.ok(performance.now() - t0 < 500, 'periodic multiple check stays linear on long runs');
 }
-for (const dateVal of ['20000101'.repeat(2), '20120120', '20220220', '20120120'.repeat(2)]) {
-    assert.deepEqual(estimate(dateVal), { level: 1, label: '弱 · 勿用纯日期', bits: 15 });
+const dateWarning = { level: 1, label: '弱 · 勿用纯日期', bits: 15 };
+for (const dateVal of ['20000101'.repeat(2), '20120120', '20220220', '20120120'.repeat(2), '20260228'.repeat(2) + '202']) {
+    assert.deepEqual(estimate(dateVal), dateWarning);
+}
+for (const value of ['202602282', '20260228'.repeat(2) + '9', '20260228 dawn']) {
+    assert.notEqual(estimate(value).label, dateWarning.label, 'not a complete date or repeated date');
+}
+{
+    const shortestPeriod = context.shortestPeriod;
+    const scans = [];
+    context.shortestPeriod = value => { scans.push(typeof value); return shortestPeriod(value); };
+    try {
+        estimate('ordinary mixed passphrase!'.repeat(50));
+        assert.ok(!scans.includes('string'), 'non-date master does not allocate a date-period table');
+    } finally {
+        context.shortestPeriod = shortestPeriod;
+    }
 }
 // Nested periodic suffix-strippable inputs must stay linear rather than exploding exponentially.
 {
