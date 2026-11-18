@@ -928,15 +928,19 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     function computeSessionTag(masterBytes, codeBytes, tierId) {
         var nonce = getSessionNonce();
         if (!nonce) return null;
-        var tierByte, masterField, codeField, msg;
+        var masterLenOffset = DOMAIN_CACHE.length;
+        var codeLenOffset = masterLenOffset + 4 + masterBytes.length;
+        var msg = new Uint8Array(codeLenOffset + 4 + codeBytes.length + 1);
         try {
-            tierByte = new Uint8Array([tierId]);
-            masterField = lenPrefixed(masterBytes);
-            codeField = lenPrefixed(codeBytes);
-            msg = concatBytes([DOMAIN_CACHE, masterField, codeField, tierByte]);
+            msg.set(DOMAIN_CACHE);
+            writeLE32(msg, masterLenOffset, masterBytes.length);
+            msg.set(masterBytes, masterLenOffset + 4);
+            writeLE32(msg, codeLenOffset, codeBytes.length);
+            msg.set(codeBytes, codeLenOffset + 4);
+            msg[msg.length - 1] = tierId;
             return hmacSha256(nonce, msg);
         } finally {
-            zeroize(masterField); zeroize(codeField); zeroize(msg); zeroize(tierByte);
+            zeroize(msg);
         }
     }
 
