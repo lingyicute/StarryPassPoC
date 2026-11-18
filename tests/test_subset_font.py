@@ -57,6 +57,10 @@ class CharacterCollectionTests(unittest.TestCase):
                 self.assertTrue(set("星愿令") <= chars)
                 self.assertNotIn("龍", chars)
 
+    def test_division_after_object_literal_keeps_same_line_strings(self):
+        chars = self.chars('const n = { valueOf() { return 8; } } / "星愿".length; const t = "令";')
+        self.assertTrue(set("星愿令") <= chars)
+
     def test_regex_scan_stops_at_line_terminator(self):
         chars = self.chars('x = a + /unterminated\nconst s = "星愿令"; y = b / 2;')
         self.assertTrue(set("星愿令") <= chars)

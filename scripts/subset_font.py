@@ -91,6 +91,28 @@ def _read_js_escape(code, pos):
     return chr(value), end
 
 
+def _regex_literal_end(code, pos):
+    i, n = pos + 1, len(code)
+    in_class = False
+    while i < n:
+        c = code[i]
+        if _JS_LINE_TERMINATOR.match(code, i):
+            break
+        if c == "\\":
+            if i + 1 == n or _JS_LINE_TERMINATOR.match(code, i + 1):
+                break
+            i += 2
+            continue
+        if c == "[":
+            in_class = True
+        elif c == "]":
+            in_class = False
+        elif c == "/" and not in_class:
+            return i + 1
+        i += 1
+    return None
+
+
 def _extract_js_strings(code):
     out, i, n = [], 0, len(code)
     prev, prev_word = "", ""
@@ -157,24 +179,10 @@ def _extract_js_strings(code):
             prev_word = ""
             i += 1
         elif c == "/" and (not prev or prev == "control-head" or prev in _REGEX_PREV or prev_word in _REGEX_KEYWORDS):
-            i += 1
-            in_class = False
-            while i < n:
-                if code[i] == "\\" and i + 1 < n and code[i + 1] not in "\n\r\u2028\u2029":
-                    i += 2
-                elif code[i] in "\n\r\u2028\u2029":
-                    break
-                elif code[i] == "[":
-                    in_class = True
-                    i += 1
-                elif code[i] == "]":
-                    in_class = False
-                    i += 1
-                elif code[i] == "/" and not in_class:
-                    i += 1
-                    break
-                else:
-                    i += 1
+            # A slash after a brace may be division. Don't consume later
+            # literals unless we could actually close a regex on this line.
+            end = _regex_literal_end(code, i)
+            i = end if end is not None else i + 1
             prev, prev_word = "/", ""
         elif c.isalpha() or c in ("_", "$"):
             j = i + 1
