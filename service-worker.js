@@ -54,14 +54,12 @@ self.addEventListener("activate", (event) => {
     );
 });
 
-function isAppRequest(request) {
+function managedCacheKey(request) {
+    if (STATIC_URLS.has(request.url)) return request.url === APP_ROOT.href ? SHELL_URL : request.url;
+    if (request.mode !== "navigate") return null;
     const url = new URL(request.url);
-    return url.origin === APP_ROOT.origin && url.pathname.startsWith(APP_ROOT.pathname);
-}
-
-function isShellRequest(request) {
-    const path = new URL(request.url).pathname;
-    return path === APP_ROOT.pathname || path === SHELL_PATH;
+    return url.origin === APP_ROOT.origin && (url.pathname === APP_ROOT.pathname || url.pathname === SHELL_PATH)
+        ? SHELL_URL : null;
 }
 
 async function matchCached(name, request) {
@@ -79,27 +77,17 @@ function cacheKeyRequest(request, url) {
     return request.url === url ? request : new Request(url, { headers: request.headers });
 }
 
-async function cachedResponse(request, navigation) {
-    // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
-    if (isShellRequest(request) && (navigation || STATIC_URLS.has(request.url))) {
-        const shellRequest = cacheKeyRequest(request, SHELL_URL);
-        const rootRequest = cacheKeyRequest(request, APP_ROOT.href);
-        const distinctReq = request.url !== SHELL_URL && request.url !== APP_ROOT.href;
-        return (await matchCached(RUNTIME, shellRequest)) || (distinctReq && await matchCached(RUNTIME, request))
-            || (await matchCached(RUNTIME, rootRequest)) || (distinctReq && await matchCached(VERSION, request))
-            || (await matchCached(VERSION, shellRequest)) || (await matchCached(VERSION, rootRequest));
-    }
-    if (!navigation) {
+async function cachedResponse(request, key) {
+    if (key !== SHELL_URL) {
         return (await matchCached(RUNTIME, request)) || (await matchCached(VERSION, request));
     }
+    // 首页的 /、/index.html 和查询参数共用最新 shell，避免换入口后退回安装时的旧 HTML。
     const shellRequest = cacheKeyRequest(request, SHELL_URL);
     const rootRequest = cacheKeyRequest(request, APP_ROOT.href);
-    return (await matchCached(RUNTIME, request))
-        || (await matchCached(RUNTIME, shellRequest))
-        || (await matchCached(RUNTIME, rootRequest))
-        || (await matchCached(VERSION, request))
-        || (await matchCached(VERSION, shellRequest))
-        || (await matchCached(VERSION, rootRequest));
+    const distinctReq = request.url !== SHELL_URL && request.url !== APP_ROOT.href;
+    return (await matchCached(RUNTIME, shellRequest)) || (distinctReq && await matchCached(RUNTIME, request))
+        || (await matchCached(RUNTIME, rootRequest)) || (distinctReq && await matchCached(VERSION, request))
+        || (await matchCached(VERSION, shellRequest)) || (await matchCached(VERSION, rootRequest));
 }
 
 function cancelBody(response) {
@@ -108,12 +96,9 @@ function cancelBody(response) {
     }
 }
 
-function putInRuntimeCache(request, response, navigation) {
+function putInRuntimeCache(request, response, key) {
     // 重定向响应写入运行时缓存会导致离线 navigate 请求（redirect: manual）被浏览器拒收。
     if (response.status !== 200 || response.type === "opaque" || response.redirected) return Promise.resolve();
-    const key = isShellRequest(request) && (navigation || STATIC_URLS.has(request.url)) ? SHELL_URL : request.url;
-    // 仅缓存明确列出的应用资源；不无限积累带查询参数的 URL 或意外缓存未来 API 的响应。
-    if (!STATIC_URLS.has(key)) return Promise.resolve();
     const copy = response.clone();
     return caches.open(RUNTIME).then((cache) => cache.put(cacheKeyRequest(request, key), copy)).catch((err) => {
         cancelBody(copy);
@@ -122,7 +107,7 @@ function putInRuntimeCache(request, response, navigation) {
 }
 
 // 截止时间覆盖响应头及应用资源的完整正文，避免半开连接阻塞缓存兜底。
-async function fetchWithTimeout(request, navigation) {
+async function fetchWithTimeout(request) {
     const controller = new AbortController();
     let timer, rawResponse = null, probeResponse = null, probeReader = null;
     const cancelPending = () => {
@@ -147,9 +132,8 @@ async function fetchWithTimeout(request, navigation) {
             rawResponse = response;
             try {
                 if (controller.signal.aborted) throw new Error("NETWORK_TIMEOUT");
-                if (response.status === 200 && response.type !== "opaque"
-                        && (navigation || STATIC_URLS.has(request.url))) {
-                    // 只预读导航与列明的静态资源；不改变 Response 的 URL、类型或头部。
+                if (response.status === 200 && response.type !== "opaque") {
+                    // 预读应用资源；不改变 Response 的 URL、类型或头部。
                     // 原响应仍可供浏览器和缓存各自消费，不提前耗尽原始 body。
                     probeResponse = response.clone();
                     if (probeResponse.body && typeof probeResponse.body.getReader === "function") {
@@ -183,22 +167,24 @@ async function fetchWithTimeout(request, navigation) {
 
 self.addEventListener("fetch", (event) => {
     const request = event.request;
-    if (request.method !== "GET" || !isAppRequest(request)) return;
-    const navigation = request.mode === "navigate";
+    if (request.method !== "GET") return;
+    // 未列出的路由由浏览器正常处理，离线时不把无关页面或 API 伪装成首页。
+    const key = managedCacheKey(request);
+    if (!key) return;
     // HTML 与脚本都重新验证，不能只更新 HTML 却继续执行旧的加密核心。
-    const network = fetchWithTimeout(request, navigation);
+    const network = fetchWithTimeout(request);
     // 在 fetch 事件中同步登记，并返回真正的写入 Promise，而不是 undefined。
-    event.waitUntil(network.then((response) => putInRuntimeCache(request, response, navigation)).catch(() => {}));
+    event.waitUntil(network.then((response) => putInRuntimeCache(request, response, key)).catch(() => {}));
     event.respondWith(
         network.then(async (response) => {
             if (response.status >= 500) {
-                const cached = await cachedResponse(request, navigation);
+                const cached = await cachedResponse(request, key);
                 if (cached) {
                     cancelBody(response);
                     return cached;
                 }
             }
             return response;
-        }).catch(async () => (await cachedResponse(request, navigation)) || Response.error())
+        }).catch(async () => (await cachedResponse(request, key)) || Response.error())
     );
 });
