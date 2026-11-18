@@ -16,6 +16,7 @@ INDEX_PATH = os.path.join(REPO_ROOT, "index.html")
 
 _JS_LINE_TERMINATOR = re.compile(r"[\r\n\u2028\u2029]")
 _REGEX_PREV = set("(,=:[!&|?{};+-*%^~<>")
+_CONTROL_HEADS = frozenset({"if", "while", "for", "with", "switch", "catch"})
 _REGEX_KEYWORDS = frozenset({
     "return", "case", "throw", "in", "of", "typeof", "void", "delete",
     "yield", "await", "new", "else", "do",
@@ -94,6 +95,7 @@ def _extract_js_strings(code):
     out, i, n = [], 0, len(code)
     prev, prev_word = "", ""
     tpl_braces = []
+    control_parens = []
 
     def scan_template(pos):
         while pos < n:
@@ -145,7 +147,16 @@ def _extract_js_strings(code):
         elif code[i:i + 2] == "/*":
             end = code.find("*/", i + 2)
             i = n if end == -1 else end + 2
-        elif c == "/" and (not prev or prev in _REGEX_PREV or prev_word in _REGEX_KEYWORDS):
+        elif c == "(":
+            control_parens.append(prev_word in _CONTROL_HEADS)
+            prev, prev_word = "(", ""
+            i += 1
+        elif c == ")":
+            # A control head ends before a statement; a call/group ends an expression.
+            prev = "control-head" if control_parens and control_parens.pop() else ")"
+            prev_word = ""
+            i += 1
+        elif c == "/" and (not prev or prev == "control-head" or prev in _REGEX_PREV or prev_word in _REGEX_KEYWORDS):
             i += 1
             in_class = False
             while i < n:
@@ -169,8 +180,9 @@ def _extract_js_strings(code):
             j = i + 1
             while j < n and (code[j].isalnum() or code[j] in ("_", "$")):
                 j += 1
-            prev_word = code[i:j]
-            prev = prev_word[-1]
+            # A property such as obj.if or obj.return is not a keyword.
+            prev_word = code[i:j] if prev != "." else ""
+            prev = code[j - 1]
             i = j
         elif code[i:i + 2] in ("++", "--"):
             prev, prev_word = code[i:i + 2], ""

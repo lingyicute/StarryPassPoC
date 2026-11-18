@@ -43,6 +43,13 @@ class CharacterCollectionTests(unittest.TestCase):
         self.assertIn("星", regex_chars)
         self.assertNotIn("龍", regex_chars)
 
+    def test_regex_after_control_head_and_division_after_calls(self):
+        chars = self.chars('if (ok(check(a / b))) /"龍/u.test(value); output.textContent = "星愿令";')
+        self.assertTrue(set("星愿令") <= chars)
+        self.assertNotIn("龍", chars)
+        chars = self.chars('const a = obj.if(1) / 2; const b = obj?.return / 2; output.textContent = "愿";')
+        self.assertIn("愿", chars)
+
     def test_line_comment_stops_at_each_js_line_terminator(self):
         for separator in ("\n", "\r", "\r\n", "\u2028", "\u2029"):
             with self.subTest(separator=repr(separator)):
