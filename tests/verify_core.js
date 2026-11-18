@@ -100,6 +100,35 @@ check(() => assert.equal(afterWipe.password, 'WueNKY^SRHRh4!DL', 'recreated aren
 check(() => assert.equal(afterWipe.cached, false, 'recreated session does not reuse the old key'));
 check(() => assert.equal(cachedCore._test.state().wasmState.mod, beforeWipe.wasmState.mod, 'recreated engine reuses module'));
 
+// A caller's progress callback must not overwrite the active Argon2 arena.
+{
+    const engine = factory(null, false);
+    let attempted = false;
+    const result = engine.deriveSync(request, () => {
+        if (attempted) return;
+        attempted = true;
+        assert.throws(() => engine.deriveSync({ ...request, code: 'nested request' }), /DERIVE_IN_PROGRESS/);
+    });
+    check(() => assert.equal(attempted, true));
+    check(() => assert.equal(result.password, 'WueNKY^SRHRh4!DL'));
+    check(() => assert.equal(engine.deriveSync(request).cached, true));
+    engine.wipeSession();
+
+    let canceledArena, canceledNonce, lanes = 0;
+    check(() => assert.throws(() => engine.deriveSync(request, () => {
+        lanes++;
+        const state = engine._test.state();
+        canceledArena = new Uint8Array(state.wasmState.mem.buffer);
+        canceledNonce = state.sessionNonce;
+        engine.wipeSession();
+    }), /SESSION_WIPED/));
+    check(() => assert.equal(lanes, 1, 'wipe stops the current derivation at its next progress checkpoint'));
+    check(() => assert.ok(allZero(canceledArena) && allZero(canceledNonce), 'canceled arena and nonce are cleared'));
+    check(() => assert.equal(engine._test.state().wasmState, null));
+    check(() => assert.deepEqual({ ...engine.deriveSync(request) }, { password: 'WueNKY^SRHRh4!DL', cached: false }));
+    engine.wipeSession();
+}
+
 // 没有 CSPRNG、或 CSPRNG 抛异常：派生仍确定且正确，但既不复用也不保留密钥缓存。
 for (const crypto of [undefined, { getRandomValues() { throw new Error('RNG_UNAVAILABLE'); } }]) {
     const engine = loadCore({ crypto })(null, false);

@@ -885,8 +885,12 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
 
     var cachedTag = null;
     var cachedSk  = null;
+    var deriving = false, wipeRequested = false;
 
     function wipeSession() {
+        // A progress callback may ask to wipe while Argon2 still owns the arena.
+        // Abort at the next checkpoint and release the arena in deriveSync's finally.
+        if (deriving) { wipeRequested = true; return; }
         if (cachedTag) { zeroize(cachedTag); cachedTag = null; }
         if (cachedSk)  { zeroize(cachedSk);  cachedSk  = null; }
         if (sessionNonce) { zeroize(sessionNonce); sessionNonce = null; }
@@ -980,13 +984,22 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         }
     }
 
+    function assertNotWiped() {
+        if (wipeRequested) throw new Error('SESSION_WIPED');
+    }
+
     function deriveSync(req, onProgress) {
+        // Reject before entering the cleanup path: it belongs to the active call.
+        if (deriving) throw new Error('DERIVE_IN_PROGRESS');
+        deriving = true;
         var inp = null, reqTag = null, salt = null, sk = null, usedCache = false, completed = false;
         try {
             runSelfTest();
             inp = canonicalizeInputs(req);
+            assertNotWiped();
             if (!inp.masterBytes.length || !inp.codeBytes.length) throw new Error('EMPTY_INPUT');
             reqTag = computeSessionTag(inp.masterBytes, inp.codeBytes, inp.tierSpec.id);
+            assertNotWiped();
             if (reqTag && cachedTag && cachedSk && constantTimeEqual(reqTag, cachedTag)) {
                 usedCache = true;
                 sk = cachedSk;
@@ -1003,13 +1016,18 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
                     passes: inp.tierSpec.passes,
                     parallelism: inp.tierSpec.parallelism,
                     tagLength: 32
-                }, false, typeof onProgress === 'function' ? onProgress : null);
+                }, false, typeof onProgress === 'function' ? function () {
+                    onProgress();
+                    assertNotWiped();
+                } : null);
                 // 首次自检只覆盖当时的引擎；本次若由 WASM 降级为纯 JS，先补测该压缩核再放行。
                 if (!lastArenaWasm) runSelfTest(true);
                 zeroize(salt); salt = null;
             }
             zeroize(inp.masterBytes);
+            assertNotWiped();
             var pwd = synthesizePassword(sk, inp.codeBytes, inp.counter, inp.length, inp.mode);
+            assertNotWiped();
             if (!usedCache && reqTag) {
                 cachedTag = reqTag; reqTag = null;
                 cachedSk = sk;
@@ -1024,6 +1042,8 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
             zeroize(reqTag); zeroize(salt);
             // 没有安全 nonce 时，派生密钥只用一次，不保留不可复用的“缓存”。
             if (sk && sk !== cachedSk) zeroize(sk);
+            deriving = false;
+            wipeRequested = false;
             if (!completed) wipeSession();
         }
     }
