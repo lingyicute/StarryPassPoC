@@ -14,6 +14,7 @@ FONT_URL = "https://raw.githubusercontent.com/lingyicute/Nebulove/main/Nebulove.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_PATH = os.path.join(REPO_ROOT, "index.html")
 
+_JS_LINE_TERMINATOR = re.compile(r"[\r\n\u2028\u2029]")
 _REGEX_PREV = set("(,=:[!&|?{};+-*%^~<>")
 _REGEX_KEYWORDS = frozenset({
     "return", "case", "throw", "in", "of", "typeof", "void", "delete",
@@ -139,8 +140,8 @@ def _extract_js_strings(code):
                 prev, prev_word = "}", ""
                 i += 1
         elif code[i:i + 2] == "//":
-            end = code.find("\n", i + 2)
-            i = n if end == -1 else end + 1
+            end = _JS_LINE_TERMINATOR.search(code, i + 2)
+            i = end.end() if end else n
         elif code[i:i + 2] == "/*":
             end = code.find("*/", i + 2)
             i = n if end == -1 else end + 2
