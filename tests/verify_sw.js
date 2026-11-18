@@ -66,7 +66,8 @@ const context = vm.createContext({ URL, Request, Response, Promise, caches, Abor
         skipWaiting: async () => {}, clients: { claim: async () => {} } },
     fetch: (request, options) => { networkCalls++; return fetchImpl(request, options); }
 });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../service-worker.js'), 'utf8'), context);
+const workerSource = fs.readFileSync(path.join(__dirname, '../service-worker.js'), 'utf8');
+vm.runInContext(workerSource, context);
 const names = vm.runInContext('({ VERSION, RUNTIME, CACHE_PREFIX, SHELL_URL })', context);
 function event(type, request) {
     const waits = [];
@@ -385,6 +386,25 @@ async function checkText(e, expected) {
     const onlineStorageFailure = event('fetch', req());
     await checkText(onlineStorageFailure, 'ONLINE DESPITE STORAGE FAILURE'); await finish(onlineStorageFailure);
     openError = null; matchError = null;
+
+    // A deployed revision gets fresh stores even if an older runtime cache is warm.
+    const previousRuntime = stores.get(names.RUNTIME);
+    previousRuntime.set(names.SHELL_URL, new Response('STALE PREVIOUS REVISION'));
+    const revision = 'a'.repeat(40);
+    const nextContext = vm.createContext({ ...context });
+    const nextSource = workerSource.replace(/^const CACHE_REVISION = .*;$/m, `const CACHE_REVISION = "${revision}";`);
+    assert.notEqual(nextSource, workerSource);
+    vm.runInContext(nextSource, nextContext);
+    const nextNames = vm.runInContext('({ VERSION, RUNTIME })', nextContext);
+    check(() => assert.notEqual(nextNames.RUNTIME, names.RUNTIME));
+    await finish(event('install'));
+    check(() => assert.ok(stores.has(names.RUNTIME), 'installation leaves the old runtime intact until activation'));
+    await finish(event('activate'));
+    check(() => assert.ok(!stores.has(names.VERSION) && !stores.has(names.RUNTIME)));
+    check(() => assert.ok(stores.has(nextNames.VERSION) && stores.has('other-app')));
+    fetchImpl = offline;
+    const upgraded = event('fetch', req());
+    await checkText(upgraded, 'INSTALLED ' + names.SHELL_URL); await finish(upgraded);
 
     console.log(`PASS service worker: ${checks} scope, update, offline, deadline and lifetime checks`);
 })().catch((err) => { console.error(err); process.exitCode = 1; });
