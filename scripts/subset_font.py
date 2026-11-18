@@ -32,8 +32,8 @@ def _read_css_escape(css, pos):
     if match:
         value = int(match.group(1), 16)
         if value == 0 or value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:
-            # 浏览器以 U+FFFD 替代这些值，原值没有可用的 cmap 条目。
-            return "", match.end()
+            # 收集浏览器实际渲染的 U+FFFD，而非原无效码点。
+            return "\ufffd", match.end()
         return chr(value), match.end()
     if css.startswith("\r\n", pos + 1):
         return "", pos + 3

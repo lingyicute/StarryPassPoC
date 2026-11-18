@@ -79,6 +79,12 @@ class CharacterCollectionTests(unittest.TestCase):
         self.assertNotIn("中", chars)
         self.assertFalse(any(0xD800 <= ord(char) <= 0xDFFF for char in chars))
 
+    def test_css_invalid_escapes_render_a_replacement_character(self):
+        for escape in (r"\0", r"\D800", r"\110000"):
+            with self.subTest(escape=escape):
+                chars = subset_font.collect_chars(f'<style>p::after{{content:"{escape}"}}</style>')
+                self.assertIn("\ufffd", chars)
+
     def test_css_line_continuation_does_not_break_decoding(self):
         chars = subset_font.collect_chars('<style>p::after{content:"\\\r\n\\9F8D\r\nx"}</style>')
         self.assertIn("龍", chars)
