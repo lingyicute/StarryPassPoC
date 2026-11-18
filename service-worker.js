@@ -19,6 +19,8 @@ const PRECACHE_URLS = [
     "./assets/js/spv2-worker.js"
 ];
 const NETWORK_TIMEOUT_MS = 3000;
+const NETWORK_ONLY_CACHE_MODES = new Set(["no-store", "only-if-cached", "force-cache"]);
+const REQUEST_PRECONDITIONS = ["Range", "If-Range", "If-Match", "If-None-Match", "If-Modified-Since", "If-Unmodified-Since"];
 const STATIC_URLS = new Set(PRECACHE_URLS.map((url) => new URL(url, APP_ROOT).href));
 
 async function precache() {
@@ -168,8 +170,10 @@ async function fetchWithTimeout(request) {
 
 self.addEventListener("fetch", (event) => {
     const request = event.request;
-    // CacheStorage contains complete responses, not byte ranges.
-    if (request.method !== "GET" || request.headers.has("Range")) return;
+    // Our offline copies cannot evaluate HTTP preconditions or serve byte ranges.
+    // Leave explicit browser cache modes intact rather than forcing revalidation.
+    if (request.method !== "GET" || NETWORK_ONLY_CACHE_MODES.has(request.cache)
+            || REQUEST_PRECONDITIONS.some((name) => request.headers.has(name))) return;
     // 未列出的路由由浏览器正常处理，离线时不把无关页面或 API 伪装成首页。
     const key = managedCacheKey(request);
     if (!key) return;
