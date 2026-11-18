@@ -189,6 +189,15 @@ async function checkText(e, expected) {
     const afterRedirect = event('fetch', req());
     await checkText(afterRedirect, 'NEW SHELL'); await finish(afterRedirect);
 
+    fetchImpl = async () => new Response('TRANSIENT SHELL', {
+        headers: { 'Cache-Control': 'max-age=0, No-StOrE' }
+    });
+    const transient = event('fetch', req());
+    await checkText(transient, 'TRANSIENT SHELL'); await finish(transient);
+    fetchImpl = offline;
+    const afterTransient = event('fetch', req());
+    await checkText(afterTransient, 'NEW SHELL'); await finish(afterTransient);
+
     let serverErrorBodyCanceled = false;
     fetchImpl = async () => {
         const resp = new Response('server unavailable', { status: 503 });

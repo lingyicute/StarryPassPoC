@@ -705,6 +705,7 @@ async def test_real_crypto(browser, url):
 async def test_service_worker(browser, url, site, state):
     context = await browser.new_context(ignore_https_errors=True)
     page = await context.new_page()
+    state['cacheable_assets'] = True
     try:
         await page.goto(url)
         await poll(lambda: page.evaluate('!!navigator.serviceWorker.controller'))
@@ -716,6 +717,13 @@ async def test_service_worker(browser, url, site, state):
         await page.reload()
         check(await page.get_attribute('html', 'data-review') == 'new', 'online shell updates without SW version bump')
         check(await page.evaluate('globalThis.__coreReviewMarker') == 'new', 'online core also updates without version bump')
+        # A no-store shell is usable online but must not replace the last offline copy.
+        updated_html = html_path.read_text(encoding='utf-8')
+        state['cacheable_assets'] = False
+        html_path.write_text(updated_html.replace('data-review="new"', 'data-review="transient"'), encoding='utf-8')
+        await page.reload()
+        check(await page.get_attribute('html', 'data-review') == 'transient', 'no-store shell is still served online')
+        html_path.write_text(updated_html, encoding='utf-8')
         await context.set_offline(True)
         for suffix in ['?offline=1', 'index.html?offline=2']:
             await page.goto(url.rsplit('/', 1)[0] + '/' + suffix)
@@ -729,13 +737,13 @@ async def test_service_worker(browser, url, site, state):
         check(await page.get_attribute('html', 'data-review') == 'new', 'HTTP 503 falls back to usable offline shell')
         check(await page.evaluate('typeof spv2CoreFactory') == 'function', 'HTTP 503 still loads cached core')
     finally:
-        state['server_error'] = False
+        state['server_error'] = state['cacheable_assets'] = False
         await context.close()
     print('PASS browser: HTTPS service-worker update, query aliases, offline derivation and HTTP 503')
 
 
 async def test_service_worker_vary(browser, url, state):
-    state['vary_accept'] = True
+    state['vary_accept'] = state['cacheable_assets'] = True
     context = await browser.new_context(ignore_https_errors=True)
     page = await context.new_page()
     try:
@@ -766,7 +774,7 @@ async def test_service_worker_vary(browser, url, state):
         await fill(page); await ready(page)
         check(await page.inner_text('#password-output') == BASE_PASSWORD, 'Vary deployment retains offline Worker derivation')
     finally:
-        state['vary_accept'] = False
+        state['vary_accept'] = state['cacheable_assets'] = False
         await context.close()
     print('PASS browser: real Vary cache keys, offline aliases and Worker derivation')
 
@@ -894,7 +902,8 @@ async def main():
                 pass
 
             def end_headers(self):
-                self.send_header('Cache-Control', 'no-cache' if state.get('allow_bfcache') else 'no-store')
+                cacheable = state.get('allow_bfcache') or state.get('cacheable_assets')
+                self.send_header('Cache-Control', 'no-cache' if cacheable else 'no-store')
                 if state.get('vary_accept'):
                     self.send_header('Vary', 'Accept')
                 super().end_headers()

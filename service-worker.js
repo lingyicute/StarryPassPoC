@@ -102,6 +102,9 @@ function cancelBody(response) {
 function putInRuntimeCache(request, response, key) {
     // 重定向响应写入运行时缓存会导致离线 navigate 请求（redirect: manual）被浏览器拒收。
     if (response.status !== 200 || response.type === "opaque" || response.redirected) return Promise.resolve();
+    // CacheStorage does not apply HTTP cache directives automatically.
+    const cacheControl = response.headers.get("Cache-Control");
+    if (cacheControl && /(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl)) return Promise.resolve();
     const copy = response.clone();
     return caches.open(RUNTIME).then((cache) => cache.put(cacheKeyRequest(request, key), copy)).catch((err) => {
         cancelBody(copy);
