@@ -427,6 +427,9 @@
             color: var(--md-sys-color-on-surface);
         }
         .password--empty {
+            /* 占位与错误提示不是口令：不要一次点击就整段选中。 */
+            user-select: text;
+            -webkit-user-select: text;
             font-family: var(--md-ref-typeface);
             font-size: 15px;
             font-weight: 400;
