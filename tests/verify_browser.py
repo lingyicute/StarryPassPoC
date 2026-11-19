@@ -618,6 +618,29 @@ async def test_theme_first_paint_and_system_follow(browser, url):
     print('PASS browser: theme applied before first paint and OS changes followed until a manual choice')
 
 
+async def test_theme_without_storage(browser, url):
+    context = await browser.new_context(ignore_https_errors=True, color_scheme='dark')
+    page = await context.new_page()
+    try:
+        await page.add_init_script("""(() => {
+            Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Denied', 'SecurityError'); } });
+            matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                window.__lastSystemTheme = event.matches ? 'dark' : 'light';
+            });
+        })()""")
+        await page.goto(url)
+        check(await page.get_attribute('html', 'data-theme') == 'dark', 'blocked storage still allows system theme')
+        await page.click('#theme-toggle')
+        await page.emulate_media(color_scheme='light')
+        await poll(lambda: page.evaluate("window.__lastSystemTheme === 'light'"))
+        await page.emulate_media(color_scheme='dark')
+        await poll(lambda: page.evaluate("window.__lastSystemTheme === 'dark'"))
+        check(await page.get_attribute('html', 'data-theme') == 'light', 'manual theme survives OS changes without storage')
+    finally:
+        await context.close()
+    print('PASS browser: unavailable storage does not override the current manual theme')
+
+
 async def test_required_character_classes(browser, url):
     cases = [
         ('full', ['A1!' * 5 + 'A', 'a1!' * 5 + 'a', 'aA!' * 5 + 'a', 'aA1' * 5 + 'a'], FAKE_PASSWORD),
@@ -935,6 +958,7 @@ async def main():
                     await test_counter_accessible_name(browser, url)
                     await test_counter_not_restored(browser, url, state)
                     await test_theme_first_paint_and_system_follow(browser, url)
+                    await test_theme_without_storage(browser, url)
                     await test_malformed_results(browser, url)
                     await test_required_character_classes(browser, url)
                     await test_real_crypto(browser, url)
