@@ -744,16 +744,17 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     /* ---------- Stage 2 & Stage 3: HKDF-SHA-256 + Zero-Bias Rejection Synthesis ---------- */
     function synthesizePassword(sk, codeBytes, counter, length, modeName) {
         var modeSpec = Object.prototype.hasOwnProperty.call(MODES, modeName) ? MODES[modeName] : MODES.full;
-        var meta = new Uint8Array(7), prk, codeField, info, prev, streamBuf;
-        writeLE32(meta, 0, counter >>> 0);
-        writeLE16(meta, 4, length & 0xffff);
-        meta[6] = modeSpec.id;
+        var metaOffset = DOMAIN_EXPAND.length, codeLenOffset = metaOffset + 7;
+        var prk, info, prev, streamBuf;
         try {
             prk = hmacSha256(DOMAIN_EXTRACT, sk);
-            codeField = lenPrefixed(codeBytes);
-            info = concatBytes([DOMAIN_EXPAND, meta, codeField]);
-            zeroize(codeField);
-            zeroize(meta);
+            info = new Uint8Array(codeLenOffset + 4 + codeBytes.length);
+            info.set(DOMAIN_EXPAND);
+            writeLE32(info, metaOffset, counter >>> 0);
+            writeLE16(info, metaOffset + 4, length & 0xffff);
+            info[metaOffset + 6] = modeSpec.id;
+            writeLE32(info, codeLenOffset, codeBytes.length);
+            info.set(codeBytes, codeLenOffset + 4);
 
             var blockIdx = 0;
             prev = new Uint8Array(0);
@@ -817,8 +818,6 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
         } finally {
             zeroize(prk);
             zeroize(info);
-            zeroize(codeField);
-            zeroize(meta);
             zeroize(prev);
             zeroize(streamBuf);
         }
@@ -945,14 +944,16 @@ function spv2CoreFactory(workerGlobal, forcePureJs) {
     }
 
     function buildSalt(codeBytes, tierId) {
-        var tierByte, codeField, saltIn;
+        var codeLenOffset = DOMAIN_SALT.length;
+        var saltIn = new Uint8Array(codeLenOffset + 4 + codeBytes.length + 1);
         try {
-            tierByte = new Uint8Array([tierId]);
-            codeField = lenPrefixed(codeBytes);
-            saltIn = concatBytes([DOMAIN_SALT, codeField, tierByte]);
+            saltIn.set(DOMAIN_SALT);
+            writeLE32(saltIn, codeLenOffset, codeBytes.length);
+            saltIn.set(codeBytes, codeLenOffset + 4);
+            saltIn[saltIn.length - 1] = tierId;
             return sha256(saltIn);
         } finally {
-            zeroize(saltIn); zeroize(codeField); zeroize(tierByte);
+            zeroize(saltIn);
         }
     }
 
