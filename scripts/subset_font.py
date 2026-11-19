@@ -178,12 +178,23 @@ def _extract_js_strings(code):
             prev = "control-head" if control_parens and control_parens.pop() else ")"
             prev_word = ""
             i += 1
-        elif c == "/" and (not prev or prev == "control-head" or prev in _REGEX_PREV or prev_word in _REGEX_KEYWORDS):
-            # A slash after a brace may be division. Don't consume later
-            # literals unless we could actually close a regex on this line.
-            end = _regex_literal_end(code, i)
-            i = end if end is not None else i + 1
-            prev, prev_word = "/", ""
+        elif c == "/":
+            # Division needs a right operand, which can itself be a regex.
+            # Conversely a finished regex is an operand, not an operator.
+            can_start_regex = (not prev or prev in ("control-head", "division")
+                               or prev in _REGEX_PREV or prev_word in _REGEX_KEYWORDS)
+            end = _regex_literal_end(code, i) if can_start_regex else None
+            if end is None:
+                # A slash after a brace may be division. Don't consume later
+                # literals unless a regex actually closes on this line.
+                i += 2 if code.startswith("/=", i) else 1
+                prev = "division"
+            else:
+                i = end
+                while i < n and code[i] in "dgimsuvy":
+                    i += 1
+                prev = "regexp"
+            prev_word = ""
         elif c.isalpha() or c in ("_", "$"):
             j = i + 1
             while j < n and (code[j].isalnum() or code[j] in ("_", "$")):

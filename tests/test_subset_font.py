@@ -50,6 +50,16 @@ class CharacterCollectionTests(unittest.TestCase):
         chars = self.chars('const a = obj.if(1) / 2; const b = obj?.return / 2; output.textContent = "愿";')
         self.assertIn("愿", chars)
 
+    def test_regex_operand_of_division_does_not_swallow_strings(self):
+        for expression in ('12 / /["龍]/u.source.length', 'n /= /["龍]/u.source.length',
+                           '/a/g / /["龍]/u.source.length', '/a/ / "愿".length / 2'):
+            with self.subTest(expression=expression):
+                chars = self.chars(f'let n = 12; {expression}; output.textContent = "星";')
+                self.assertIn("星", chars)
+                self.assertNotIn("龍", chars)
+                if '愿' in expression:
+                    self.assertIn('愿', chars)
+
     def test_regex_after_for_await_head(self):
         chars = self.chars('async function f(xs) { for /* gap */ await (const x of xs) /"龍/u.test(x); return "星愿"; }')
         self.assertTrue(set("星愿") <= chars)
