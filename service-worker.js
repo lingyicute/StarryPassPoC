@@ -1,5 +1,5 @@
 // Pages stamps this with the deployed commit. Bump it for other releases.
-const CACHE_REVISION = "1793680003";
+const CACHE_REVISION = "1793680004";
 const APP_ROOT = new URL("./", self.location.href);
 const SHELL_URL = new URL("./index.html", APP_ROOT).href;
 const SHELL_PATH = new URL(SHELL_URL).pathname;
@@ -23,22 +23,49 @@ const NETWORK_ONLY_CACHE_MODES = new Set(["no-store", "only-if-cached", "force-c
 const REQUEST_PRECONDITIONS = ["Range", "If-Range", "If-Match", "If-None-Match", "If-Modified-Since", "If-Unmodified-Since"];
 const STATIC_URLS = new Set(PRECACHE_URLS.map((url) => new URL(url, APP_ROOT).href));
 
+function hasNoStore(response) {
+    // CacheStorage does not apply HTTP cache directives automatically.
+    const control = response.headers.get("Cache-Control");
+    return control !== null && /(?:^|,)\s*no-store\s*(?:,|$)/i.test(control);
+}
+
 async function precache() {
-    const cache = await caches.open(VERSION);
     // "./" 与 "./index.html" 是同一份首页，只下载后者；根路径离线时同样回退到它。
     const requests = PRECACHE_URLS.filter((url) => url !== "./").map((url) =>
         new Request(new URL(url, APP_ROOT), { cache: "reload" }));
-    await cache.addAll(requests);
-    // addAll 会原样保存重定向得到的响应；带 redirected 标记的 shell 在离线导航（redirect: manual）
-    // 时会被浏览器拒收，因此用同一正文与头部重建响应以去掉该标记。
-    await Promise.all(requests.map(async (request) => {
-        const response = await cache.match(request);
-        if (!response || !response.redirected) return;
-        const body = await response.blob();
-        await cache.put(request, new Response(body, {
-            status: response.status, statusText: response.statusText, headers: response.headers
-        }));
+    // Unlike addAll(), inspect cache policy before persisting any response.
+    const results = await Promise.allSettled(requests.map(async (request) => {
+        const response = await fetch(request);
+        if (!response.ok || response.status === 206) {
+            cancelBody(response);
+            throw new Error(`Cannot precache ${request.url}: HTTP ${response.status}`);
+        }
+        if (hasNoStore(response)) {
+            cancelBody(response);
+            return null;
+        }
+        return { request, response };
     }));
+    const entries = results.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
+    try {
+        // A missing asset still fails installation rather than activating an
+        // incomplete cache. An explicit no-store opt-out is not a failure.
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed) throw failed.reason;
+        if (!entries.length) return;
+        const cache = await caches.open(VERSION);
+        await Promise.all(entries.map(({ request, response }) => {
+            // A redirected response cannot serve an offline `redirect: manual`
+            // navigation. Keep the headers and body but drop the redirect flag.
+            const entry = response.redirected ? new Response(response.body, {
+                status: response.status, statusText: response.statusText, headers: response.headers
+            }) : response;
+            return cache.put(request, entry);
+        }));
+    } catch (err) {
+        for (const { response } of entries) cancelBody(response);
+        throw err;
+    }
 }
 
 self.addEventListener("install", (event) => {
@@ -102,9 +129,7 @@ function cancelBody(response) {
 function putInRuntimeCache(request, response, key) {
     // 重定向响应写入运行时缓存会导致离线 navigate 请求（redirect: manual）被浏览器拒收。
     if (response.status !== 200 || response.type === "opaque" || response.redirected) return Promise.resolve();
-    // CacheStorage does not apply HTTP cache directives automatically.
-    const cacheControl = response.headers.get("Cache-Control");
-    if (cacheControl && /(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl)) return Promise.resolve();
+    if (hasNoStore(response)) return Promise.resolve();
     const copy = response.clone();
     return caches.open(RUNTIME).then((cache) => cache.put(cacheKeyRequest(request, key), copy)).catch((err) => {
         cancelBody(copy);

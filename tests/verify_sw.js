@@ -5,9 +5,20 @@ const path = require('node:path');
 const vm = require('node:vm');
 const base = 'https://example.test/app/';
 const handlers = {}, stores = new Map(), installs = [], redirectedInstalls = new Set();
+const noStoreInstalls = new Set();
+let skipWaitingCalls = 0;
 let fetchImpl, putGate = null, putError = null, openError = null, matchError = null, networkCalls = 0, checks = 0;
 const check = (fn) => { fn(); checks++; };
 const key = (request) => new URL(typeof request === 'string' ? request : request.url, base).href;
+function installResponse(request) {
+    installs.push(request);
+    const url = key(request);
+    const response = new Response('INSTALLED ' + url, {
+        headers: noStoreInstalls.has(url) ? { 'Cache-Control': 'public, NO-STORE' } : {}
+    });
+    if (redirectedInstalls.has(url)) Object.defineProperty(response, 'redirected', { value: true });
+    return response;
+}
 function cachedMatch(name, request) {
     if (matchError === 'all' || matchError === name) throw new Error('INJECTED_cache_match');
     const response = stores.get(name)?.get(key(request));
@@ -33,14 +44,6 @@ const caches = {
                 if (putGate) await putGate;
                 if (putError) throw putError;
                 store.set(key(request), response);
-            },
-            async addAll(requests) {
-                installs.push(...requests);
-                for (const request of requests) {
-                    const response = new Response('INSTALLED ' + key(request));
-                    if (redirectedInstalls.has(key(request))) Object.defineProperty(response, 'redirected', { value: true });
-                    store.set(key(request), response);
-                }
             }
         };
     },
@@ -63,7 +66,7 @@ const context = vm.createContext({ URL, Request, Response, Promise, caches, Abor
     clearTimeout(id) { timers.delete(id); },
     self: { location: { href: base + 'service-worker.js' },
         addEventListener(type, fn) { handlers[type] = fn; },
-        skipWaiting: async () => {}, clients: { claim: async () => {} } },
+        skipWaiting: async () => { skipWaitingCalls++; }, clients: { claim: async () => {} } },
     fetch: (request, options) => { networkCalls++; return fetchImpl(request, options); }
 });
 const workerSource = fs.readFileSync(path.join(__dirname, '../service-worker.js'), 'utf8');
@@ -93,10 +96,23 @@ async function checkText(e, expected) {
     const text = await responseText(e); check(() => assert.equal(text, expected));
 }
 (async () => {
-    // 托管方把 index.html 重定向（如 /index.html → /）时，addAll 存下的是带 redirected 标记的响应。
+    // Reject incomplete releases before writing any downloads to CacheStorage.
+    fetchImpl = async (request) => request.url.endsWith('/favicon.ico')
+        ? new Response('missing', { status: 404 }) : installResponse(request);
+    await assert.rejects(finish(event('install')), /Cannot precache .*favicon.ico: HTTP 404/);
+    check(() => assert.equal(skipWaitingCalls, 0));
+    check(() => assert.ok(!stores.has(names.VERSION)));
+    installs.length = 0;
+    // 托管方可能把 index.html 重定向到根目录；保存的响应必须去掉 redirected 标记。
     redirectedInstalls.add(names.SHELL_URL);
+    const uncachedIcon = new URL('assets/img/icons/512.png', base).href;
+    noStoreInstalls.add(uncachedIcon);
+    fetchImpl = async (request) => installResponse(request);
     const install = event('install');
     await finish(install);
+    check(() => assert.equal(skipWaitingCalls, 1));
+    check(() => assert.ok(installs.some((r) => r.url === uncachedIcon), 'no-store asset is fetched'));
+    check(() => assert.ok(!stores.get(names.VERSION).has(uncachedIcon), 'no-store asset is not persisted on install'));
     const installedShell = stores.get(names.VERSION).get(names.SHELL_URL);
     check(() => assert.equal(installedShell.redirected, false, 'precached shell must not keep the redirect flag'));
     check(() => assert.equal(installedShell.status, 200));
@@ -417,6 +433,7 @@ async function checkText(e, expected) {
     vm.runInContext(nextSource, nextContext);
     const nextNames = vm.runInContext('({ VERSION, RUNTIME })', nextContext);
     check(() => assert.notEqual(nextNames.RUNTIME, names.RUNTIME));
+    fetchImpl = async (request) => installResponse(request);
     await finish(event('install'));
     check(() => assert.ok(stores.has(names.RUNTIME), 'installation leaves the old runtime intact until activation'));
     await finish(event('activate'));
