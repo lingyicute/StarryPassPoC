@@ -1205,8 +1205,8 @@
 
             function setMasterVisible(showing) {
                 masterInput.type = showing ? 'text' : 'password';
+                // A toggle keeps one label; aria-pressed alone announces the state.
                 visibilityBtn.setAttribute('aria-pressed', String(showing));
-                visibilityBtn.setAttribute('aria-label', showing ? '隐藏主密码' : '显示主密码');
                 visibilityBtn.querySelector('svg path').setAttribute('d', showing ? ICONS.eyeOff : ICONS.eye);
             }
             visibilityBtn.addEventListener('click', function () {
